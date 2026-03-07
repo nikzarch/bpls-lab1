@@ -11,6 +11,7 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -36,9 +37,12 @@ public class SecurityConfig {
                         "/api/auth/**",
                         "/swagger-ui/**",
                         "/swagger-ui.html",
-                        "/api/docs/**",
+                        "/swagger-ui/index.html",
+                        "/v3/api-docs/**",
                         "/api/api-docs/**",
-                        "/v3/api-docs/**"
+                        "/api/docs/**",
+                        "/swagger-resources/**",
+                        "/webjars/**"
                 ).permitAll()
                         .anyRequest().authenticated()
                 )
@@ -53,6 +57,16 @@ public class SecurityConfig {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
         provider.setPasswordEncoder(passwordEncoder());
         return provider;
+    }
+
+    @Bean
+    public WebSecurityCustomizer webSecurityCustomizer() {
+        return (web) -> web.ignoring().requestMatchers(
+                "/swagger-ui/**",
+                "/v3/api-docs/**",
+                "/swagger-resources/**",
+                "/webjars/**"
+        );
     }
 
     @Bean
