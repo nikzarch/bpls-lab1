@@ -2,16 +2,24 @@ spring:
   application:
     name: labpay
   datasource:
-    url: ${DATASOURCE_URL}
-    username: ${POSTGRES_USER}
-    password: ${POSTGRES_PASSWORD}
+    url: jdbc:postgresql://localhost:5432/labpay
+    username: postgres
+    password: postgres
     driver-class-name: org.postgresql.Driver
-
   jpa:
     hibernate:
       ddl-auto: update
+    open-in-view: false
+
+springdoc:
+  swagger-ui:
+    path: /api/docs
 
 app:
   jwt:
     secret: "nobodygonnastealmyjwtsecretisnthe1234567"
-    access-token-expiration-minutes: 60
+    expiration-ms: 3600000
+  card:
+    encryption-key: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  webhook:
+    secret: "webhook-hmac-secret-key-change-me"

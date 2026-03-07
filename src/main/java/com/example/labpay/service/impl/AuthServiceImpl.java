@@ -1,6 +1,5 @@
 package com.example.labpay.service.impl;
 
-
 import com.example.labpay.domain.user.AppUser;
 import com.example.labpay.domain.user.Role;
 import com.example.labpay.domain.wallet.Wallet;
@@ -13,8 +12,6 @@ import com.example.labpay.repository.WalletRepository;
 import com.example.labpay.service.AuthService;
 import com.example.labpay.service.JwtService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,12 +44,9 @@ public class AuthServiceImpl implements AuthService {
                 .passwordHash(passwordEncoder.encode(request.password()))
                 .role(role)
                 .build());
-        walletRepository.save(Wallet.builder()
-                .owner(user)
-                .build());
+        walletRepository.save(Wallet.builder().owner(user).build());
 
-        String token = jwtService.generateToken(user);
-        return new AuthResponse(token);
+        return new AuthResponse(jwtService.generateToken(user));
     }
 
     @Override
@@ -65,9 +59,12 @@ public class AuthServiceImpl implements AuthService {
         }
 
         AppUser user = appUserRepository.findByUsername(request.username())
-                .orElseThrow(() -> new BusinessException("User not found"));
+                .orElseThrow(() -> new BusinessException("Invalid credentials"));
 
-        String token = jwtService.generateToken(user);
-        return new AuthResponse(token);
+        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            throw new BusinessException("Invalid credentials");
+        }
+
+        return new AuthResponse(jwtService.generateToken(user));
     }
 }

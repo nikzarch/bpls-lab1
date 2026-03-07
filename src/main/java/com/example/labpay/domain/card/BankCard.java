@@ -4,15 +4,9 @@ import com.example.labpay.domain.user.AppUser;
 import jakarta.persistence.*;
 import lombok.*;
 
-import java.math.BigDecimal;
-
 @Entity
 @Table(name = "bank_cards")
-@Getter
-@Setter
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
+@Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 public class BankCard {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -26,7 +20,7 @@ public class BankCard {
     private String token;
 
     @Column(nullable = false)
-    private String maskedCardNumber; // 1234 **** **** 1234
+    private String maskedCardNumber;
 
     @Column(nullable = false)
     private String holderName;
@@ -34,7 +28,4 @@ public class BankCard {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private CardStatus status;
-
-    @Column(nullable = false)
-    private BigDecimal balance;
 }
