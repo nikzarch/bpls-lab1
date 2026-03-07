@@ -111,7 +111,7 @@ if [ "$(echo "$BALANCE < $TRANSFER_AMOUNT" | bc)" = "1" ]; then
 
         BIND=$(curl -s -X POST "$BASE/cards/bind" \
             -H "Authorization: Bearer $SENDER_TOKEN" -H "Content-Type: application/json" \
-            -d "{\"cardNumber\":\"$CARD_NUMBER\",\"holderName\":\"Sender\",\"expiryDate\":\"12/28\",\"cvv\":\"$CARD_CVV\"}")
+            -d "{\"cardNumber\":\"$CARD_NUMBER\",\"holderName\":\"Sender\",\"expiryDate\":\"02/30\",\"cvv\":\"$CARD_CVV\"}")
 
         SESSION_ID=$(echo "$BIND" | python3 -c "import sys,json; print(json.load(sys.stdin).get('sessionId') or '')" 2>/dev/null)
         REQUIRES_3DS=$(echo "$BIND" | python3 -c "import sys,json; print(json.load(sys.stdin).get('requires3ds',False))" 2>/dev/null)
@@ -128,8 +128,7 @@ if [ "$(echo "$BALANCE < $TRANSFER_AMOUNT" | bc)" = "1" ]; then
         fi
 
         if [ -z "$CARD_TOKEN" ] || [ "$CARD_TOKEN" = "" ]; then
-            CARD_TOKEN=$(curl -s "$BASE/cards" -H "Authorization: Bearer $SENDER_TOKEN" | \
-                python3 -c "import sys,json; c=json.load(sys.stdin); print(c[0]['token'] if c else '')" 2>/dev/null)
+            CARD_TOKEN=$(echo "$CARDS" | python3 -c "import sys,json; c=json.load(sys.stdin).get('items',[]); print(c[0]['token'] if c else '')" 2>/dev/null)
         fi
 
         if [ -n "$CARD_TOKEN" ] && [ "$CARD_TOKEN" != "" ]; then

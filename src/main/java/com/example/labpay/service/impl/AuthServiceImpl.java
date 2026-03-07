@@ -28,12 +28,6 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        if (request.username() == null || request.username().isBlank()) {
-            throw new BusinessException("Username is required");
-        }
-        if (request.password() == null || request.password().isBlank()) {
-            throw new BusinessException("Password is required");
-        }
         if (appUserRepository.findByUsername(request.username()).isPresent()) {
             throw new BusinessException("Username already exists");
         }
@@ -51,13 +45,6 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse login(LoginRequest request) {
-        if (request.username() == null || request.username().isBlank()) {
-            throw new BusinessException("Username is required");
-        }
-        if (request.password() == null || request.password().isBlank()) {
-            throw new BusinessException("Password is required");
-        }
-
         AppUser user = appUserRepository.findByUsername(request.username())
                 .orElseThrow(() -> new BusinessException("Invalid credentials"));
 

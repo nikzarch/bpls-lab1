@@ -9,6 +9,7 @@ import com.example.labpay.dto.request.Confirm3dsRequest;
 import com.example.labpay.dto.response.BindCardResultResponse;
 import com.example.labpay.dto.response.CardResponse;
 import com.example.labpay.exception.BusinessException;
+import com.example.labpay.exception.NotFoundException;
 import com.example.labpay.repository.BankCardRepository;
 import com.example.labpay.repository.CardBindingSessionRepository;
 import com.example.labpay.service.BankClient;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
@@ -40,34 +42,43 @@ public class CardServiceImpl implements CardService {
         String digits = request.cardNumber().replaceAll("\\s+", "");
 
         if (!CardTokenizer.isValidLuhn(digits)) {
-            throw new BusinessException("Invalid card number (Luhn check failed)");
-        }
-        if (request.holderName() == null || request.holderName().isBlank()) {
-            throw new BusinessException("Holder name is required");
+            throw new BusinessException("Invalid card number");
         }
 
-        String bankSessionId = bankClient.initiateBind(digits);
+        String[] expiryParts = request.expiryDate().split("/");
+        int month = Integer.parseInt(expiryParts[0]);
+        int year = 2000 + Integer.parseInt(expiryParts[1]);
+        if (YearMonth.of(year, month).isBefore(YearMonth.now())) {
+            throw new BusinessException("Card is expired");
+        }
 
-        CardBindingSession session = sessionRepository.save(CardBindingSession.builder()
+        String masked = CardTokenizer.maskCardNumber(digits);
+        if (bankCardRepository.existsByOwnerIdAndMaskedCardNumber(user.getId(), masked)) {
+            throw new BusinessException("Card already bound");
+        }
+
+        String bankSessionId = bankClient.initiateBind(digits, request.cvv(), request.expiryDate());
+
+        sessionRepository.save(CardBindingSession.builder()
                 .sessionId(bankSessionId)
                 .user(user)
                 .encryptedCardNumber(cardTokenizer.encrypt(digits))
                 .holderName(request.holderName())
-                .maskedCardNumber(CardTokenizer.maskCardNumber(digits))
+                .maskedCardNumber(masked)
                 .confirmationCode("")
                 .confirmed(false)
                 .expiresAt(Instant.now().plus(5, ChronoUnit.MINUTES))
                 .createdAt(Instant.now())
                 .build());
 
-        return new BindCardResultResponse(true, session.getSessionId(), null, null);
+        return new BindCardResultResponse(true, bankSessionId, null, null);
     }
 
     @Override
     @Transactional
     public CardResponse confirm3ds(String username, Confirm3dsRequest request) {
         CardBindingSession session = sessionRepository.findBySessionId(request.sessionId())
-                .orElseThrow(() -> new BusinessException("Session not found"));
+                .orElseThrow(() -> new NotFoundException("Session not found"));
 
         if (session.isConfirmed()) {
             throw new BusinessException("Session already confirmed");
@@ -87,7 +98,21 @@ public class CardServiceImpl implements CardService {
         sessionRepository.save(session);
 
         String cardNumber = cardTokenizer.decrypt(session.getEncryptedCardNumber());
-        BankCard card = saveCard(user, cardNumber, session.getHolderName());
+        String masked = CardTokenizer.maskCardNumber(cardNumber);
+
+        if (bankCardRepository.existsByOwnerIdAndMaskedCardNumber(user.getId(), masked)) {
+            throw new BusinessException("Card already bound");
+        }
+
+        BankCard card = bankCardRepository.save(BankCard.builder()
+                .owner(user)
+                .token(CardTokenizer.generateToken())
+                .maskedCardNumber(masked)
+                .holderName(session.getHolderName())
+                .encryptedCardNumber(session.getEncryptedCardNumber())
+                .status(CardStatus.ACTIVE)
+                .build());
+
         return toResponse(card);
     }
 
@@ -104,21 +129,11 @@ public class CardServiceImpl implements CardService {
     public void deleteCard(String username, Long cardId) {
         AppUser user = userService.getByUsername(username);
         BankCard card = bankCardRepository.findById(cardId)
-                .orElseThrow(() -> new BusinessException("Card not found"));
+                .orElseThrow(() -> new NotFoundException("Card not found"));
         if (!card.getOwner().getId().equals(user.getId())) {
             throw new BusinessException("Card does not belong to user");
         }
         bankCardRepository.delete(card);
-    }
-
-    private BankCard saveCard(AppUser user, String cardNumber, String holderName) {
-        return bankCardRepository.save(BankCard.builder()
-                .owner(user)
-                .token(CardTokenizer.generateToken())
-                .maskedCardNumber(CardTokenizer.maskCardNumber(cardNumber))
-                .holderName(holderName)
-                .status(CardStatus.ACTIVE)
-                .build());
     }
 
     private CardResponse toResponse(BankCard card) {

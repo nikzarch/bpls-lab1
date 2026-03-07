@@ -22,8 +22,13 @@ public class BankClientImpl implements BankClient {
     private String bankUrl;
 
     @Override
-    public String initiateBind(String cardNumber) {
-        JsonNode resp = post("/bind", "{\"card_number\":\"" + cardNumber + "\"}");
+    public String initiateBind(String cardNumber, String cvv, String expiry) {
+        String body = mapper.createObjectNode()
+                .put("card_number", cardNumber)
+                .put("cvv", cvv)
+                .put("expiry", expiry)
+                .toString();
+        JsonNode resp = post("/bind", body);
         if (!resp.get("ok").asBoolean()) {
             throw new BusinessException("Bank rejected card: " + resp.get("error").asText());
         }
@@ -32,8 +37,11 @@ public class BankClientImpl implements BankClient {
 
     @Override
     public void confirm3ds(String sessionId, String code) {
-        JsonNode resp = post("/confirm-3ds",
-                "{\"session_id\":\"" + sessionId + "\",\"code\":\"" + code + "\"}");
+        String body = mapper.createObjectNode()
+                .put("session_id", sessionId)
+                .put("code", code)
+                .toString();
+        JsonNode resp = post("/confirm-3ds", body);
         if (!resp.get("ok").asBoolean()) {
             throw new BusinessException("3DS failed: " + resp.get("error").asText());
         }
@@ -41,8 +49,11 @@ public class BankClientImpl implements BankClient {
 
     @Override
     public String initiateCharge(String cardNumber, double amount) {
-        JsonNode resp = post("/charge",
-                "{\"card_number\":\"" + cardNumber + "\",\"amount\":" + amount + "}");
+        String body = mapper.createObjectNode()
+                .put("card_number", cardNumber)
+                .put("amount", amount)
+                .toString();
+        JsonNode resp = post("/charge", body);
         if (!resp.get("ok").asBoolean()) {
             throw new BusinessException("Charge failed: " + resp.get("error").asText());
         }
@@ -51,10 +62,25 @@ public class BankClientImpl implements BankClient {
 
     @Override
     public void completeCharge(String sessionId, double amount) {
-        JsonNode resp = post("/complete-charge",
-                "{\"session_id\":\"" + sessionId + "\",\"amount\":" + amount + "}");
+        String body = mapper.createObjectNode()
+                .put("session_id", sessionId)
+                .put("amount", amount)
+                .toString();
+        JsonNode resp = post("/complete-charge", body);
         if (!resp.get("ok").asBoolean()) {
             throw new BusinessException("Charge completion failed: " + resp.get("error").asText());
+        }
+    }
+
+    @Override
+    public void directCharge(String cardNumber, double amount) {
+        String body = mapper.createObjectNode()
+                .put("card_number", cardNumber)
+                .put("amount", amount)
+                .toString();
+        JsonNode resp = post("/direct-charge", body);
+        if (!resp.get("ok").asBoolean()) {
+            throw new BusinessException("Direct charge failed: " + resp.get("error").asText());
         }
     }
 
@@ -70,7 +96,7 @@ public class BankClientImpl implements BankClient {
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
-            throw new BusinessException("Bank service unavailable: " + e.getMessage());
+            throw new BusinessException("Bank service unavailable");
         }
     }
 }

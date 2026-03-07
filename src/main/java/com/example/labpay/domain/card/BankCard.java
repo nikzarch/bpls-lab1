@@ -25,6 +25,9 @@ public class BankCard {
     @Column(nullable = false)
     private String holderName;
 
+    @Column(nullable = false)
+    private String encryptedCardNumber;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private CardStatus status;

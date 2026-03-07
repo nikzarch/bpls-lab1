@@ -24,5 +24,3 @@ app:
     encryption-key: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
   webhook:
     secret: "webhook-hmac-secret-key-change-me"
-server:
-  port: 8000

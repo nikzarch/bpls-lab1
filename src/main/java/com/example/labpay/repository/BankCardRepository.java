@@ -9,4 +9,5 @@ import java.util.Optional;
 public interface BankCardRepository extends JpaRepository<BankCard, Long> {
     List<BankCard> findByOwnerId(Long ownerId);
     Optional<BankCard> findByToken(String token);
+    boolean existsByOwnerIdAndMaskedCardNumber(Long ownerId, String maskedCardNumber);
 }

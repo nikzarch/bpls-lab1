@@ -69,7 +69,7 @@ step "SERVICE TASK" "Показать форму ввода реквизитов
 
 BIND=$(curl -s -X POST "$BASE/cards/bind" \
     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-    -d "{\"cardNumber\":\"$CARD_NUMBER\",\"holderName\":\"Test User\",\"expiryDate\":\"12/28\",\"cvv\":\"$CARD_CVV\"}")
+    -d "{\"cardNumber\":\"$CARD_NUMBER\",\"holderName\":\"Test User\",\"expiryDate\":\"02/30\",\"cvv\":\"$CARD_CVV\"}")
 
 ERROR=$(echo "$BIND" | python3 -c "import sys,json; print(json.load(sys.stdin).get('message',''))" 2>/dev/null)
 

@@ -7,6 +7,7 @@ import com.example.labpay.domain.wallet.TransactionType;
 import com.example.labpay.dto.request.TransferRequest;
 import com.example.labpay.dto.response.TransferResponse;
 import com.example.labpay.exception.BusinessException;
+import com.example.labpay.exception.NotFoundException;
 import com.example.labpay.repository.AppUserRepository;
 import com.example.labpay.repository.TransferRepository;
 import com.example.labpay.service.TransferService;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -39,19 +41,20 @@ public class TransferServiceImpl implements TransferService {
     public TransferResponse createTransfer(String username, TransferRequest request) {
         AppUser sender = userService.getByUsername(username);
         AppUser recipient = appUserRepository.findById(request.recipientId())
-                .orElseThrow(() -> new BusinessException("Recipient not found"));
+                .orElseThrow(() -> new NotFoundException("Recipient not found"));
 
         if (sender.getId().equals(recipient.getId())) {
             throw new BusinessException("Cannot transfer to yourself");
         }
-        if (request.amount().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BusinessException("Amount must be positive");
-        }
-        if (request.amount().compareTo(MAX_SINGLE_TRANSFER) > 0) {
+
+        BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);
+
+        if (amount.compareTo(MAX_SINGLE_TRANSFER) > 0) {
             throw new BusinessException("Transfer exceeds wallet limit");
         }
 
-        String idempotencyKey = request.idempotencyKey() != null ? request.idempotencyKey() : UUID.randomUUID().toString();
+        String idempotencyKey = request.idempotencyKey() != null && !request.idempotencyKey().isBlank()
+                ? request.idempotencyKey() : UUID.randomUUID().toString();
         var existing = transferRepository.findByIdempotencyKey(idempotencyKey);
         if (existing.isPresent()) {
             return toResponse(existing.get());
@@ -60,7 +63,7 @@ public class TransferServiceImpl implements TransferService {
         Transfer transfer = transferRepository.save(Transfer.builder()
                 .sender(sender)
                 .recipient(recipient)
-                .amount(request.amount())
+                .amount(amount)
                 .type(request.type())
                 .status(TransferStatus.PENDING)
                 .idempotencyKey(idempotencyKey)
@@ -69,9 +72,9 @@ public class TransferServiceImpl implements TransferService {
 
         try {
             String opId = UUID.randomUUID().toString();
-            walletService.debit(sender.getId(), request.amount(), opId,
+            walletService.debit(sender.getId(), amount, opId,
                     "Transfer to user #" + recipient.getId(), TransactionType.WALLET_TRANSFER_OUT);
-            walletService.credit(recipient.getId(), request.amount(), opId,
+            walletService.credit(recipient.getId(), amount, opId,
                     "Transfer from user #" + sender.getId(), TransactionType.WALLET_TRANSFER_IN);
 
             transfer.setStatus(TransferStatus.SUCCESS);
@@ -84,14 +87,14 @@ public class TransferServiceImpl implements TransferService {
         }
 
         transferRepository.save(transfer);
-        log.info("Transfer {} completed: {} -> {} amount={}", transfer.getId(), sender.getId(), recipient.getId(), request.amount());
+        log.info("Transfer {} completed: {} -> {} amount={}", transfer.getId(), sender.getId(), recipient.getId(), amount);
         return toResponse(transfer);
     }
 
     @Override
     public TransferResponse getTransfer(Long id) {
         Transfer t = transferRepository.findById(id)
-                .orElseThrow(() -> new BusinessException("Transfer not found"));
+                .orElseThrow(() -> new NotFoundException("Transfer not found"));
         return toResponse(t);
     }
 
@@ -105,6 +108,6 @@ public class TransferServiceImpl implements TransferService {
 
     private TransferResponse toResponse(Transfer t) {
         return new TransferResponse(t.getId(), t.getSender().getId(), t.getRecipient().getId(),
-                t.getAmount(), t.getType(), t.getStatus(), t.getCreatedAt());
+                t.getAmount().setScale(2, RoundingMode.HALF_UP), t.getType(), t.getStatus(), t.getCreatedAt());
     }
 }

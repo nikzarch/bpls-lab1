@@ -65,8 +65,7 @@ WIDGET=$(curl -s -X POST "$BASE/widgets" \
 WIDGET_ID=$(echo "$WIDGET" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
 
 if [ -z "$WIDGET_ID" ] || [ "$WIDGET_ID" = "" ]; then
-    WIDGET_ID=$(curl -s "$BASE/widgets" -H "Authorization: Bearer $MERCH_TOKEN" | \
-        python3 -c "import sys,json; w=json.load(sys.stdin); print(w[0]['id'] if w else '')" 2>/dev/null)
+    WIDGET_ID=$(echo "$WIDGETS" | python3 -c "import sys,json; w=json.load(sys.stdin).get('items',[]); print(w[0]['id'] if w else '')" 2>/dev/null)
 fi
 
 PRODUCT=$(curl -s -X POST "$BASE/widgets/$WIDGET_ID/products" \
@@ -138,7 +137,7 @@ if [ -n "$CARD_NUMBER" ] && [ -n "$CARD_CVV" ]; then
 
         BIND=$(curl -s -X POST "$BASE/cards/bind" \
             -H "Authorization: Bearer $CUST_TOKEN" -H "Content-Type: application/json" \
-            -d "{\"cardNumber\":\"$CARD_NUMBER\",\"holderName\":\"Test User\",\"expiryDate\":\"12/28\",\"cvv\":\"$CARD_CVV\"}")
+            -d "{\"cardNumber\":\"$CARD_NUMBER\",\"holderName\":\"Test User\",\"expiryDate\":\"02/30\",\"cvv\":\"$CARD_CVV\"}")
 
         SESSION_ID=$(echo "$BIND" | python3 -c "import sys,json; print(json.load(sys.stdin).get('sessionId') or '')" 2>/dev/null)
         REQUIRES_3DS=$(echo "$BIND" | python3 -c "import sys,json; print(json.load(sys.stdin).get('requires3ds',False))" 2>/dev/null)

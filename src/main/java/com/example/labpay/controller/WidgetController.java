@@ -2,15 +2,16 @@ package com.example.labpay.controller;
 
 import com.example.labpay.dto.request.CreateProductRequest;
 import com.example.labpay.dto.request.CreateWidgetRequest;
+import com.example.labpay.dto.response.ListResponse;
 import com.example.labpay.dto.response.ProductResponse;
 import com.example.labpay.dto.response.WidgetResponse;
 import com.example.labpay.service.WidgetService;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/widgets")
@@ -21,22 +22,24 @@ public class WidgetController {
     private final WidgetService widgetService;
 
     @PostMapping
-    public WidgetResponse create(Authentication auth, @RequestBody CreateWidgetRequest request) {
+    @ResponseStatus(HttpStatus.CREATED)
+    public WidgetResponse create(Authentication auth, @Valid @RequestBody CreateWidgetRequest request) {
         return widgetService.createWidget(auth.getName(), request);
     }
 
     @GetMapping
-    public List<WidgetResponse> list(Authentication auth) {
-        return widgetService.getMerchantWidgets(auth.getName());
+    public ListResponse<WidgetResponse> list(Authentication auth) {
+        return new ListResponse<>(widgetService.getMerchantWidgets(auth.getName()));
     }
 
     @PostMapping("/{widgetId}/products")
-    public ProductResponse createProduct(Authentication auth, @PathVariable Long widgetId, @RequestBody CreateProductRequest request) {
+    @ResponseStatus(HttpStatus.CREATED)
+    public ProductResponse createProduct(Authentication auth, @PathVariable Long widgetId, @Valid @RequestBody CreateProductRequest request) {
         return widgetService.createProduct(auth.getName(), widgetId, request);
     }
 
     @GetMapping("/{widgetId}/products")
-    public List<ProductResponse> listProducts(@PathVariable Long widgetId) {
-        return widgetService.getWidgetProducts(widgetId);
+    public ListResponse<ProductResponse> listProducts(@PathVariable Long widgetId) {
+        return new ListResponse<>(widgetService.getWidgetProducts(widgetId));
     }
 }

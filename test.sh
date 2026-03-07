@@ -115,7 +115,7 @@ echo "=== 4. Bind card ==="
 if [ "$BANK_UP" = true ]; then
     BIND=$(curl -s -X POST "$BASE/cards/bind" \
         -H "Authorization: Bearer $CUST_TOKEN" -H "Content-Type: application/json" \
-        -d "{\"cardNumber\":\"$CARD_NUMBER\",\"holderName\":\"TEST USER\",\"expiryDate\":\"12/28\",\"cvv\":\"$CARD_CVV\"}")
+        -d "{\"cardNumber\":\"$CARD_NUMBER\",\"holderName\":\"TEST USER\",\"expiryDate\":\"02/30\",\"cvv\":\"$CARD_CVV\"}")
     echo "$BIND" | python3 -m json.tool 2>/dev/null || echo "$BIND"
 
     SESSION_ID=$(echo "$BIND" | python3 -c "import sys,json; print(json.load(sys.stdin).get('sessionId',''))" 2>/dev/null)
