@@ -12,9 +12,6 @@ spring:
     open-in-view: false
 
 springdoc:
-  swagger-ui:
-    path: /api/docs
-    url: /api/api-docs
   api-docs:
     path: /api/api-docs
 
