@@ -21,29 +21,7 @@ public class UserServiceImpl implements UserService {
     private final WalletRepository walletRepository;
     private final PasswordEncoder passwordEncoder;
 
-    @Override
-    @Transactional
-    public AppUser register(RegisterRequest request) {
-        if (request.username() == null || request.username().isBlank()) {
-            throw new BusinessException("Username is required");
-        }
-        if (request.password() == null || request.password().isBlank()) {
-            throw new BusinessException("Password is required");
-        }
-        if (appUserRepository.findByUsername(request.username()).isPresent()) {
-            throw new BusinessException("Username already exists");
-        }
-        Role role = request.role() == null ? Role.CUSTOMER : request.role();
-        AppUser user = appUserRepository.save(AppUser.builder()
-                .username(request.username())
-                .passwordHash(passwordEncoder.encode(request.password()))
-                .role(role)
-                .build());
-        walletRepository.save(Wallet.builder()
-                .owner(user)
-                .build());
-        return user;
-    }
+
 
     @Override
     public AppUser getByUsername(String username) {

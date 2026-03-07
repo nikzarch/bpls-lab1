@@ -10,3 +10,8 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
+
+app:
+  jwt:
+    secret: "nobodygonnastealmyjwtsecretisnthe1234567"
+    access-token-expiration-minutes: 60
