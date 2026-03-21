@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -36,6 +37,11 @@ public class AuthController {
 
     @GetMapping("/me")
     public UserResponse me(Authentication auth) {
+        if (auth == null) {
+            throw new AuthenticationCredentialsNotFoundException("Unauthorized");
+        }
         return UserMapper.toDto(userService.getByUsername(auth.getName()));
     }
+
+
 }

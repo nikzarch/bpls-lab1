@@ -13,8 +13,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
     private final AppUserRepository appUserRepository;
-    private final WalletRepository walletRepository;
-    private final PasswordEncoder passwordEncoder;
+
 
     @Override
     public AppUser getByUsername(String username) {

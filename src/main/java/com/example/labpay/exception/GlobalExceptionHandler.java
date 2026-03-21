@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import javax.security.auth.login.CredentialNotFoundException;
 import java.util.stream.Collectors;
 
 @RestControllerAdvice
@@ -67,7 +68,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotWritableException.class)
     public void handleNotWritable(HttpMessageNotWritableException ex) {
     }
-
+    @ExceptionHandler(CredentialNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleCredentialsNotFound(Exception ex){
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse(ex.getMessage()));
+    }
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneral(Exception ex, HttpServletResponse response) {
         if (response.isCommitted()) {
