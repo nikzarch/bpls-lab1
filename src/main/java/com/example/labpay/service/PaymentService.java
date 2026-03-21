@@ -9,6 +9,6 @@ import java.util.List;
 public interface PaymentService {
     PaymentOrderResponse createOrder(String username, CreatePaymentRequest request);
     PaymentOrderResponse processPayment(String username, ProcessPaymentRequest request);
-    PaymentOrderResponse getOrder(Long orderId);
+    PaymentOrderResponse getOrder(String username,Long orderId);
     List<PaymentOrderResponse> getUserOrders(String username);
 }

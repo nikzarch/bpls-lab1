@@ -132,9 +132,13 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
-    public PaymentOrderResponse getOrder(Long orderId) {
+    public PaymentOrderResponse getOrder(String username, Long orderId) {
+        var user = userService.getByUsername(username);
         PaymentOrder order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Order not found"));
+        if (order.getBuyer().getId() != user.getId()){
+            throw new BusinessException("You are not the buyer of this order");
+        }
         return toResponse(order);
     }
 

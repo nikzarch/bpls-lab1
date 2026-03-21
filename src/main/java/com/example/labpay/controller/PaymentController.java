@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -32,8 +33,9 @@ public class PaymentController {
     }
 
     @GetMapping("/{id}")
-    public PaymentOrderResponse get(@PathVariable Long id) {
-        return paymentService.getOrder(id);
+    public PaymentOrderResponse get(Authentication auth, @PathVariable Long id) {
+
+        return paymentService.getOrder(auth.getName(),id);
     }
 
     @GetMapping
