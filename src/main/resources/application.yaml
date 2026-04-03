@@ -1,15 +1,40 @@
 spring:
   application:
     name: labpay
-  datasource:
-    url: jdbc:postgresql://localhost:5432/labpay
-    username: postgres
-    password: postgres
-    driver-class-name: org.postgresql.Driver
   jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
       ddl-auto: update
-    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+        show_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        transaction:
+          coordinator_class: jta
+          jta:
+            platform: org.hibernate.engine.transaction.jta.platform.internal.AtomikosJtaPlatform
+      jakarta:
+        persistence:
+          transactionType: JTA
+  jta:
+    enabled: true
+    atomikos:
+      properties:
+        service: labpay
+        max-timeout: 300000
+        default-jta-timeout: 30000
+
+  datasource:
+    xa:
+      data-source-class-name: org.postgresql.xa.PGXADataSource
+      properties:
+        serverName: localhost
+        portNumber: 5433
+        databaseName: postgres
+        user: postgres
+        password: 1
+
 
 springdoc:
   api-docs:
@@ -24,3 +49,5 @@ app:
     encryption-key: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
   webhook:
     secret: "webhook-hmac-secret-key-change-me"
+  security:
+    users-xml-path: classpath:users.xml

@@ -22,15 +22,15 @@ import com.example.labpay.service.BankClient;
 import com.example.labpay.service.PaymentService;
 import com.example.labpay.service.UserService;
 import com.example.labpay.service.WalletService;
+import com.example.labpay.transaction.TransactionManagerFacade;
+import com.example.labpay.transaction.TransactionOptions;
 import com.example.labpay.util.CardTokenizer;
 import com.example.labpay.util.HmacUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
@@ -49,96 +49,119 @@ public class PaymentServiceImpl implements PaymentService {
     private final WalletService walletService;
     private final BankClient bankClient;
     private final CardTokenizer cardTokenizer;
+    private final TransactionManagerFacade transactionManagerFacade;
 
     @Value("${app.webhook.secret:webhook-secret-key}")
     private String webhookSecret;
 
     @Override
-    @Transactional
     public PaymentOrderResponse createOrder(String username, CreatePaymentRequest request) {
-        AppUser buyer = userService.getByUsername(username);
+        PaymentOrder order = transactionManagerFacade.execute(
+                TransactionOptions.defaults("create-payment-order-transaction"),
+                () -> {
+                    AppUser buyer = userService.getByUsername(username);
 
-        Widget widget = widgetRepository.findById(request.widgetId())
-                .orElseThrow(() -> new NotFoundException("Widget not found"));
+                    Widget widget = widgetRepository.findById(request.widgetId())
+                            .orElseThrow(() -> new NotFoundException("Widget not found"));
 
-        ProductOffer product = productRepository.findById(request.productId())
-                .orElseThrow(() -> new NotFoundException("Product not found"));
+                    ProductOffer product = productRepository.findById(request.productId())
+                            .orElseThrow(() -> new NotFoundException("Product not found"));
 
-        if (!product.getWidget().getId().equals(widget.getId())) {
-            throw new BusinessException("Product does not belong to widget");
-        }
+                    if (!product.getWidget().getId().equals(widget.getId())) {
+                        throw new BusinessException("Product does not belong to widget");
+                    }
 
-        PaymentOrder order = orderRepository.save(PaymentOrder.builder()
-                .product(product)
-                .buyer(buyer)
-                .status(OrderStatus.CREATED)
-                .amount(product.getPrice().setScale(2, RoundingMode.HALF_UP))
-                .externalOrderId(UUID.randomUUID().toString())
-                .createdAt(Instant.now())
-                .build());
+                    return orderRepository.save(PaymentOrder.builder()
+                            .product(product)
+                            .buyer(buyer)
+                            .status(OrderStatus.CREATED)
+                            .amount(product.getPrice().setScale(2, RoundingMode.HALF_UP))
+                            .externalOrderId(UUID.randomUUID().toString())
+                            .createdAt(Instant.now())
+                            .build());
+                },
+                committedOrder -> log.info("Order {} committed", committedOrder.getId()),
+                ex -> log.error("Create order rolled back for user {}: {}", username, ex.getMessage())
+        );
 
         return toResponse(order);
     }
 
     @Override
-    @Transactional
     public PaymentOrderResponse processPayment(String username, ProcessPaymentRequest request) {
-        AppUser buyer = userService.getByUsername(username);
-        PaymentOrder order = orderRepository.findById(request.orderId())
-                .orElseThrow(() -> new NotFoundException("Order not found"));
+        PaymentOrder order = transactionManagerFacade.execute(
+                TransactionOptions.defaults("process-payment-transaction"),
+                () -> {
+                    AppUser buyer = userService.getByUsername(username);
+                    PaymentOrder currentOrder = orderRepository.findById(request.orderId())
+                            .orElseThrow(() -> new NotFoundException("Order not found"));
 
-        if (!order.getBuyer().getId().equals(buyer.getId())) {
-            throw new BusinessException("Order does not belong to user");
-        }
-        if (order.getStatus() != OrderStatus.CREATED) {
-            throw new BusinessException("Order already processed");
-        }
+                    if (!currentOrder.getBuyer().getId().equals(buyer.getId())) {
+                        throw new BusinessException("Order does not belong to user");
+                    }
+                    if (currentOrder.getStatus() != OrderStatus.CREATED) {
+                        throw new BusinessException("Order already processed");
+                    }
 
-        String opId = UUID.randomUUID().toString();
-        Widget widget = order.getProduct().getWidget();
+                    String opId = UUID.randomUUID().toString();
+                    Widget widget = currentOrder.getProduct().getWidget();
 
-        switch (request.method()) {
-            case WALLET -> {
-                walletService.debit(buyer.getId(), order.getAmount(), opId,
-                        "Payment for order " + order.getExternalOrderId(), TransactionType.WIDGET_PAYMENT_OUT);
-            }
-            case CARD -> {
-                if (request.cardToken() == null || request.cardToken().isBlank()) {
-                    throw new BusinessException("Card token required for card payment");
-                }
-                BankCard card = bankCardRepository.findByToken(request.cardToken())
-                        .filter(c -> c.getOwner().getId().equals(buyer.getId()))
-                        .orElseThrow(() -> new NotFoundException("Card not found"));
+                    switch (request.method()) {
+                        case WALLET -> walletService.debit(
+                                buyer.getId(),
+                                currentOrder.getAmount(),
+                                opId,
+                                "Payment for order " + currentOrder.getExternalOrderId(),
+                                TransactionType.WIDGET_PAYMENT_OUT
+                        );
+                        case CARD -> {
+                            if (request.cardToken() == null || request.cardToken().isBlank()) {
+                                throw new BusinessException("Card token required for card payment");
+                            }
 
-                if (card.getStatus() != CardStatus.ACTIVE) {
-                    throw new BusinessException("Card is not active");
-                }
+                            BankCard card = bankCardRepository.findByToken(request.cardToken())
+                                    .filter(c -> c.getOwner().getId().equals(buyer.getId()))
+                                    .orElseThrow(() -> new NotFoundException("Card not found"));
 
-                String cardNumber = cardTokenizer.decrypt(card.getEncryptedCardNumber());
-                bankClient.directCharge(cardNumber, order.getAmount().doubleValue());
-            }
-        }
+                            if (card.getStatus() != CardStatus.ACTIVE) {
+                                throw new BusinessException("Card is not active");
+                            }
 
-        walletService.credit(widget.getMerchant().getId(), order.getAmount(), opId,
-                "Income from order " + order.getExternalOrderId(), TransactionType.WIDGET_PAYMENT_IN);
+                            String cardNumber = cardTokenizer.decrypt(card.getEncryptedCardNumber());
+                            bankClient.directCharge(cardNumber, currentOrder.getAmount().doubleValue());
+                        }
+                    }
 
-        order.setStatus(OrderStatus.PAID);
-        order.setPaidAt(Instant.now());
-        orderRepository.save(order);
+                    walletService.credit(
+                            widget.getMerchant().getId(),
+                            currentOrder.getAmount(),
+                            opId,
+                            "Income from order " + currentOrder.getExternalOrderId(),
+                            TransactionType.WIDGET_PAYMENT_IN
+                    );
 
-        sendWebhook(order, widget);
+                    currentOrder.setStatus(OrderStatus.PAID);
+                    currentOrder.setPaidAt(Instant.now());
+
+                    return orderRepository.save(currentOrder);
+                },
+                committedOrder -> sendWebhook(committedOrder, committedOrder.getProduct().getWidget()),
+                ex -> log.error("Process payment rolled back for user {}: {}", username, ex.getMessage())
+        );
 
         return toResponse(order);
     }
 
     @Override
     public PaymentOrderResponse getOrder(String username, Long orderId) {
-        var user = userService.getByUsername(username);
+        AppUser user = userService.getByUsername(username);
         PaymentOrder order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Order not found"));
-        if (order.getBuyer().getId() != user.getId()){
+
+        if (!order.getBuyer().getId().equals(user.getId())) {
             throw new BusinessException("You are not the buyer of this order");
         }
+
         return toResponse(order);
     }
 
@@ -165,7 +188,14 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private PaymentOrderResponse toResponse(PaymentOrder o) {
-        return new PaymentOrderResponse(o.getId(), o.getExternalOrderId(), o.getStatus(),
-                o.getAmount().setScale(2, RoundingMode.HALF_UP), o.getProduct().getTitle(), o.getCreatedAt(), o.getPaidAt());
+        return new PaymentOrderResponse(
+                o.getId(),
+                o.getExternalOrderId(),
+                o.getStatus(),
+                o.getAmount().setScale(2, RoundingMode.HALF_UP),
+                o.getProduct().getTitle(),
+                o.getCreatedAt(),
+                o.getPaidAt()
+        );
     }
 }

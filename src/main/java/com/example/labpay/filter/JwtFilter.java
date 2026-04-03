@@ -1,6 +1,6 @@
 package com.example.labpay.filter;
 
-import com.example.labpay.service.JpaUserDetailsService;
+import com.example.labpay.service.XmlUserDetailsService;
 import com.example.labpay.service.impl.JwtServiceImpl;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -20,7 +20,7 @@ import java.io.IOException;
 public class JwtFilter extends OncePerRequestFilter {
 
     private final JwtServiceImpl jwtService;
-    private final JpaUserDetailsService userDetailsService;
+    private final XmlUserDetailsService userDetailsService;
 
     @Override
     protected void doFilterInternal(

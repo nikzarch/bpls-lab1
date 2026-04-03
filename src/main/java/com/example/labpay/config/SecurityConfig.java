@@ -1,7 +1,7 @@
 package com.example.labpay.config;
 
 import com.example.labpay.filter.JwtFilter;
-import com.example.labpay.service.JpaUserDetailsService;
+import com.example.labpay.service.XmlUserDetailsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,7 +24,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final JpaUserDetailsService userDetailsService;
+    private final XmlUserDetailsService userDetailsService;
     private final JwtFilter jwtFilter;
 
     @Bean
@@ -59,8 +59,8 @@ public class SecurityConfig {
 
     @Bean
     public DaoAuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
-        provider.setPasswordEncoder(passwordEncoder());
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(passwordEncoder());
+        provider.setUserDetailsService(userDetailsService);
         return provider;
     }
 

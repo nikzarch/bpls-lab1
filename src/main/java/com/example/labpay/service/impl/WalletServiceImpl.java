@@ -17,10 +17,12 @@ import com.example.labpay.repository.WalletTransactionRepository;
 import com.example.labpay.service.BankClient;
 import com.example.labpay.service.UserService;
 import com.example.labpay.service.WalletService;
+import com.example.labpay.transaction.TransactionManagerFacade;
+import com.example.labpay.transaction.TransactionOptions;
 import com.example.labpay.util.CardTokenizer;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -28,6 +30,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class WalletServiceImpl implements WalletService {
@@ -38,6 +41,7 @@ public class WalletServiceImpl implements WalletService {
     private final UserService userService;
     private final BankClient bankClient;
     private final CardTokenizer cardTokenizer;
+    private final TransactionManagerFacade transactionManagerFacade;
 
     @Override
     public WalletResponse getWallet(String username) {
@@ -47,26 +51,38 @@ public class WalletServiceImpl implements WalletService {
     }
 
     @Override
-    @Transactional
     public WalletResponse topUp(String username, TopUpRequest request) {
-        AppUser user = userService.getByUsername(username);
-        BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);
+        Wallet wallet = transactionManagerFacade.execute(
+                TransactionOptions.defaults("wallet-topup-transaction"),
+                () -> {
+                    AppUser user = userService.getByUsername(username);
+                    BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);
 
-        BankCard card = bankCardRepository.findByToken(request.cardToken())
-                .filter(c -> c.getOwner().getId().equals(user.getId()))
-                .orElseThrow(() -> new NotFoundException("Card not found"));
+                    BankCard card = bankCardRepository.findByToken(request.cardToken())
+                            .filter(c -> c.getOwner().getId().equals(user.getId()))
+                            .orElseThrow(() -> new NotFoundException("Card not found"));
 
-        if (card.getStatus() != CardStatus.ACTIVE) {
-            throw new BusinessException("Card is not active");
-        }
+                    if (card.getStatus() != CardStatus.ACTIVE) {
+                        throw new BusinessException("Card is not active");
+                    }
 
-        String cardNumber = cardTokenizer.decrypt(card.getEncryptedCardNumber());
-        bankClient.directCharge(cardNumber, amount.doubleValue());
+                    String cardNumber = cardTokenizer.decrypt(card.getEncryptedCardNumber());
+                    bankClient.directCharge(cardNumber, amount.doubleValue());
 
-        credit(user.getId(), amount, UUID.randomUUID().toString(),
-                "Top-up from card " + card.getMaskedCardNumber(), TransactionType.WALLET_TOP_UP);
+                    credit(
+                            user.getId(),
+                            amount,
+                            UUID.randomUUID().toString(),
+                            "Top-up from card " + card.getMaskedCardNumber(),
+                            TransactionType.WALLET_TOP_UP
+                    );
 
-        Wallet wallet = getWalletByUserId(user.getId());
+                    return getWalletByUserId(user.getId());
+                },
+                committedWallet -> log.info("Wallet top-up committed for user {}", username),
+                ex -> log.error("Wallet top-up rolled back for user {}: {}", username, ex.getMessage())
+        );
+
         return new WalletResponse(wallet.getId(), wallet.getBalance().setScale(2, RoundingMode.HALF_UP));
     }
 
@@ -75,15 +91,20 @@ public class WalletServiceImpl implements WalletService {
         AppUser user = userService.getByUsername(username);
         Wallet wallet = getWalletByUserId(user.getId());
         return transactionRepository.findByWalletIdOrderByCreatedAtDesc(wallet.getId()).stream()
-                .map(t -> new TransactionResponse(t.getId(), t.getType(),
-                        t.getAmount().setScale(2, RoundingMode.HALF_UP), t.getDescription(), t.getCreatedAt()))
+                .map(t -> new TransactionResponse(
+                        t.getId(),
+                        t.getType(),
+                        t.getAmount().setScale(2, RoundingMode.HALF_UP),
+                        t.getDescription(),
+                        t.getCreatedAt()
+                ))
                 .toList();
     }
 
     @Override
-    @Transactional
     public void debit(Long userId, BigDecimal amount, String operationId, String description, TransactionType type) {
         amount = amount.setScale(2, RoundingMode.HALF_UP);
+
         Wallet wallet = walletRepository.findByOwnerIdForUpdate(userId)
                 .orElseThrow(() -> new NotFoundException("Wallet not found"));
 
@@ -105,9 +126,9 @@ public class WalletServiceImpl implements WalletService {
     }
 
     @Override
-    @Transactional
     public void credit(Long userId, BigDecimal amount, String operationId, String description, TransactionType type) {
         amount = amount.setScale(2, RoundingMode.HALF_UP);
+
         Wallet wallet = walletRepository.findByOwnerIdForUpdate(userId)
                 .orElseThrow(() -> new NotFoundException("Wallet not found"));
 

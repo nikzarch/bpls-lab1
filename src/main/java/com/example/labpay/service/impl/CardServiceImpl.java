@@ -15,16 +15,19 @@ import com.example.labpay.repository.CardBindingSessionRepository;
 import com.example.labpay.service.BankClient;
 import com.example.labpay.service.CardService;
 import com.example.labpay.service.UserService;
+import com.example.labpay.transaction.TransactionManagerFacade;
+import com.example.labpay.transaction.TransactionOptions;
 import com.example.labpay.util.CardTokenizer;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CardServiceImpl implements CardService {
@@ -34,86 +37,99 @@ public class CardServiceImpl implements CardService {
     private final UserService userService;
     private final CardTokenizer cardTokenizer;
     private final BankClient bankClient;
+    private final TransactionManagerFacade transactionManagerFacade;
 
     @Override
-    @Transactional
     public BindCardResultResponse bindCard(String username, BindCardRequest request) {
-        AppUser user = userService.getByUsername(username);
-        String digits = request.cardNumber().replaceAll("\\s+", "");
+        return transactionManagerFacade.execute(
+                TransactionOptions.defaults("bind-card-transaction"),
+                () -> {
+                    AppUser user = userService.getByUsername(username);
+                    String digits = request.cardNumber().replaceAll("\\s+", "");
 
-        if (!CardTokenizer.isValidLuhn(digits)) {
-            throw new BusinessException("Invalid card number");
-        }
+                    if (!CardTokenizer.isValidLuhn(digits)) {
+                        throw new BusinessException("Invalid card number");
+                    }
 
-        String[] expiryParts = request.expiryDate().split("/");
-        int month = Integer.parseInt(expiryParts[0]);
-        int year = 2000 + Integer.parseInt(expiryParts[1]);
-        if (YearMonth.of(year, month).isBefore(YearMonth.now())) {
-            throw new BusinessException("Card is expired");
-        }
+                    String[] expiryParts = request.expiryDate().split("/");
+                    int month = Integer.parseInt(expiryParts[0]);
+                    int year = 2000 + Integer.parseInt(expiryParts[1]);
+                    if (YearMonth.of(year, month).isBefore(YearMonth.now())) {
+                        throw new BusinessException("Card is expired");
+                    }
 
-        String masked = CardTokenizer.maskCardNumber(digits);
-        if (bankCardRepository.existsByOwnerIdAndMaskedCardNumber(user.getId(), masked)) {
-            throw new BusinessException("Card already bound");
-        }
+                    String masked = CardTokenizer.maskCardNumber(digits);
+                    if (bankCardRepository.existsByOwnerIdAndMaskedCardNumber(user.getId(), masked)) {
+                        throw new BusinessException("Card already bound");
+                    }
 
-        String bankSessionId = bankClient.initiateBind(digits, request.cvv(), request.expiryDate());
+                    String bankSessionId = bankClient.initiateBind(digits, request.cvv(), request.expiryDate());
 
-        sessionRepository.save(CardBindingSession.builder()
-                .sessionId(bankSessionId)
-                .user(user)
-                .encryptedCardNumber(cardTokenizer.encrypt(digits))
-                .holderName(request.holderName())
-                .maskedCardNumber(masked)
-                .confirmationCode("")
-                .confirmed(false)
-                .expiresAt(Instant.now().plus(5, ChronoUnit.MINUTES))
-                .createdAt(Instant.now())
-                .build());
+                    sessionRepository.save(CardBindingSession.builder()
+                            .sessionId(bankSessionId)
+                            .user(user)
+                            .encryptedCardNumber(cardTokenizer.encrypt(digits))
+                            .holderName(request.holderName())
+                            .maskedCardNumber(masked)
+                            .confirmationCode("")
+                            .confirmed(false)
+                            .expiresAt(Instant.now().plus(5, ChronoUnit.MINUTES))
+                            .createdAt(Instant.now())
+                            .build());
 
-        return new BindCardResultResponse(true, bankSessionId, null, null);
+                    return new BindCardResultResponse(true, bankSessionId, null, null);
+                },
+                result -> log.info("Card binding session created for user {}", username),
+                ex -> log.error("Bind card rolled back for user {}: {}", username, ex.getMessage())
+        );
     }
 
     @Override
-    @Transactional
     public CardResponse confirm3ds(String username, Confirm3dsRequest request) {
-        CardBindingSession session = sessionRepository.findBySessionId(request.sessionId())
-                .orElseThrow(() -> new NotFoundException("Session not found"));
+        return transactionManagerFacade.execute(
+                TransactionOptions.defaults("confirm-3ds-transaction"),
+                () -> {
+                    CardBindingSession session = sessionRepository.findBySessionId(request.sessionId())
+                            .orElseThrow(() -> new NotFoundException("Session not found"));
 
-        if (session.isConfirmed()) {
-            throw new BusinessException("Session already confirmed");
-        }
-        if (Instant.now().isAfter(session.getExpiresAt())) {
-            throw new BusinessException("Session expired");
-        }
+                    if (session.isConfirmed()) {
+                        throw new BusinessException("Session already confirmed");
+                    }
+                    if (Instant.now().isAfter(session.getExpiresAt())) {
+                        throw new BusinessException("Session expired");
+                    }
 
-        AppUser user = userService.getByUsername(username);
-        if (!session.getUser().getId().equals(user.getId())) {
-            throw new BusinessException("Session does not belong to user");
-        }
+                    AppUser user = userService.getByUsername(username);
+                    if (!session.getUser().getId().equals(user.getId())) {
+                        throw new BusinessException("Session does not belong to user");
+                    }
 
-        bankClient.confirm3ds(request.sessionId(), request.code());
+                    bankClient.confirm3ds(request.sessionId(), request.code());
 
-        session.setConfirmed(true);
-        sessionRepository.save(session);
+                    session.setConfirmed(true);
+                    sessionRepository.save(session);
 
-        String cardNumber = cardTokenizer.decrypt(session.getEncryptedCardNumber());
-        String masked = CardTokenizer.maskCardNumber(cardNumber);
+                    String cardNumber = cardTokenizer.decrypt(session.getEncryptedCardNumber());
+                    String masked = CardTokenizer.maskCardNumber(cardNumber);
 
-        if (bankCardRepository.existsByOwnerIdAndMaskedCardNumber(user.getId(), masked)) {
-            throw new BusinessException("Card already bound");
-        }
+                    if (bankCardRepository.existsByOwnerIdAndMaskedCardNumber(user.getId(), masked)) {
+                        throw new BusinessException("Card already bound");
+                    }
 
-        BankCard card = bankCardRepository.save(BankCard.builder()
-                .owner(user)
-                .token(CardTokenizer.generateToken())
-                .maskedCardNumber(masked)
-                .holderName(session.getHolderName())
-                .encryptedCardNumber(session.getEncryptedCardNumber())
-                .status(CardStatus.ACTIVE)
-                .build());
+                    BankCard card = bankCardRepository.save(BankCard.builder()
+                            .owner(user)
+                            .token(CardTokenizer.generateToken())
+                            .maskedCardNumber(masked)
+                            .holderName(session.getHolderName())
+                            .encryptedCardNumber(session.getEncryptedCardNumber())
+                            .status(CardStatus.ACTIVE)
+                            .build());
 
-        return toResponse(card);
+                    return toResponse(card);
+                },
+                result -> log.info("3DS confirmed for user {}", username),
+                ex -> log.error("Confirm 3DS rolled back for user {}: {}", username, ex.getMessage())
+        );
     }
 
     @Override
@@ -125,18 +141,33 @@ public class CardServiceImpl implements CardService {
     }
 
     @Override
-    @Transactional
     public void deleteCard(String username, Long cardId) {
-        AppUser user = userService.getByUsername(username);
-        BankCard card = bankCardRepository.findById(cardId)
-                .orElseThrow(() -> new NotFoundException("Card not found"));
-        if (!card.getOwner().getId().equals(user.getId())) {
-            throw new BusinessException("Card does not belong to user");
-        }
-        bankCardRepository.delete(card);
+        transactionManagerFacade.execute(
+                TransactionOptions.defaults("delete-card-transaction"),
+                () -> {
+                    AppUser user = userService.getByUsername(username);
+                    BankCard card = bankCardRepository.findById(cardId)
+                            .orElseThrow(() -> new NotFoundException("Card not found"));
+
+                    if (!card.getOwner().getId().equals(user.getId())) {
+                        throw new BusinessException("Card does not belong to user");
+                    }
+
+                    bankCardRepository.delete(card);
+                    return null;
+                },
+                result -> log.info("Card {} deleted by user {}", cardId, username),
+                ex -> log.error("Delete card rolled back for user {}: {}", username, ex.getMessage())
+        );
     }
 
     private CardResponse toResponse(BankCard card) {
-        return new CardResponse(card.getId(), card.getMaskedCardNumber(), card.getHolderName(), card.getStatus(), card.getToken());
+        return new CardResponse(
+                card.getId(),
+                card.getMaskedCardNumber(),
+                card.getHolderName(),
+                card.getStatus(),
+                card.getToken()
+        );
     }
 }

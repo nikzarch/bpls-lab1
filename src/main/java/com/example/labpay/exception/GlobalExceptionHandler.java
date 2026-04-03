@@ -2,6 +2,7 @@ package com.example.labpay.exception;
 
 import com.example.labpay.dto.response.ErrorResponse;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -19,6 +20,7 @@ import javax.security.auth.login.CredentialNotFoundException;
 import java.util.stream.Collectors;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
@@ -78,6 +80,7 @@ public class GlobalExceptionHandler {
         if (response.isCommitted()) {
             return null;
         }
+        log.error(ex.getMessage());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ErrorResponse("Internal server error"));
     }

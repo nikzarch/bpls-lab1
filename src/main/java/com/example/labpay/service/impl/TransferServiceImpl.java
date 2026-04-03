@@ -13,10 +13,11 @@ import com.example.labpay.repository.TransferRepository;
 import com.example.labpay.service.TransferService;
 import com.example.labpay.service.UserService;
 import com.example.labpay.service.WalletService;
+import com.example.labpay.transaction.TransactionManagerFacade;
+import com.example.labpay.transaction.TransactionOptions;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -35,59 +36,72 @@ public class TransferServiceImpl implements TransferService {
     private final AppUserRepository appUserRepository;
     private final UserService userService;
     private final WalletService walletService;
+    private final TransactionManagerFacade transactionManagerFacade;
 
     @Override
-    @Transactional
     public TransferResponse createTransfer(String username, TransferRequest request) {
-        AppUser sender = userService.getByUsername(username);
-        AppUser recipient = appUserRepository.findById(request.recipientId())
-                .orElseThrow(() -> new NotFoundException("Recipient not found"));
+        Transfer transfer = transactionManagerFacade.execute(
+                TransactionOptions.defaults("create-transfer-transaction"),
+                () -> {
+                    AppUser sender = userService.getByUsername(username);
+                    AppUser recipient = appUserRepository.findById(request.recipientId())
+                            .orElseThrow(() -> new NotFoundException("Recipient not found"));
 
-        if (sender.getId().equals(recipient.getId())) {
-            throw new BusinessException("Cannot transfer to yourself");
-        }
+                    if (sender.getId().equals(recipient.getId())) {
+                        throw new BusinessException("Cannot transfer to yourself");
+                    }
 
-        BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);
+                    BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);
+                    if (amount.compareTo(MAX_SINGLE_TRANSFER) > 0) {
+                        throw new BusinessException("Transfer exceeds wallet limit");
+                    }
 
-        if (amount.compareTo(MAX_SINGLE_TRANSFER) > 0) {
-            throw new BusinessException("Transfer exceeds wallet limit");
-        }
+                    String idempotencyKey = request.idempotencyKey() != null && !request.idempotencyKey().isBlank()
+                            ? request.idempotencyKey()
+                            : UUID.randomUUID().toString();
 
-        String idempotencyKey = request.idempotencyKey() != null && !request.idempotencyKey().isBlank()
-                ? request.idempotencyKey() : UUID.randomUUID().toString();
-        var existing = transferRepository.findByIdempotencyKey(idempotencyKey);
-        if (existing.isPresent()) {
-            return toResponse(existing.get());
-        }
+                    var existing = transferRepository.findByIdempotencyKey(idempotencyKey);
+                    if (existing.isPresent()) {
+                        return existing.get();
+                    }
 
-        Transfer transfer = transferRepository.save(Transfer.builder()
-                .sender(sender)
-                .recipient(recipient)
-                .amount(amount)
-                .type(request.type())
-                .status(TransferStatus.PENDING)
-                .idempotencyKey(idempotencyKey)
-                .createdAt(Instant.now())
-                .build());
+                    Transfer created = transferRepository.save(Transfer.builder()
+                            .sender(sender)
+                            .recipient(recipient)
+                            .amount(amount)
+                            .type(request.type())
+                            .status(TransferStatus.PENDING)
+                            .idempotencyKey(idempotencyKey)
+                            .createdAt(Instant.now())
+                            .build());
 
-        try {
-            String opId = UUID.randomUUID().toString();
-            walletService.debit(sender.getId(), amount, opId,
-                    "Transfer to user #" + recipient.getId(), TransactionType.WALLET_TRANSFER_OUT);
-            walletService.credit(recipient.getId(), amount, opId,
-                    "Transfer from user #" + sender.getId(), TransactionType.WALLET_TRANSFER_IN);
+                    String opId = UUID.randomUUID().toString();
 
-            transfer.setStatus(TransferStatus.SUCCESS);
-            transfer.setCompletedAt(Instant.now());
-        } catch (BusinessException e) {
-            transfer.setStatus(TransferStatus.FAILED);
-            transfer.setCompletedAt(Instant.now());
-            transferRepository.save(transfer);
-            throw e;
-        }
+                    walletService.debit(
+                            sender.getId(),
+                            amount,
+                            opId,
+                            "Transfer to user #" + recipient.getId(),
+                            TransactionType.WALLET_TRANSFER_OUT
+                    );
 
-        transferRepository.save(transfer);
-        log.info("Transfer {} completed: {} -> {} amount={}", transfer.getId(), sender.getId(), recipient.getId(), amount);
+                    walletService.credit(
+                            recipient.getId(),
+                            amount,
+                            opId,
+                            "Transfer from user #" + sender.getId(),
+                            TransactionType.WALLET_TRANSFER_IN
+                    );
+
+                    created.setStatus(TransferStatus.SUCCESS);
+                    created.setCompletedAt(Instant.now());
+
+                    return transferRepository.save(created);
+                },
+                committedTransfer -> log.info("Transfer {} committed", committedTransfer.getId()),
+                ex -> log.error("Transfer rolled back for user {}: {}", username, ex.getMessage())
+        );
+
         return toResponse(transfer);
     }
 
@@ -107,7 +121,14 @@ public class TransferServiceImpl implements TransferService {
     }
 
     private TransferResponse toResponse(Transfer t) {
-        return new TransferResponse(t.getId(), t.getSender().getId(), t.getRecipient().getId(),
-                t.getAmount().setScale(2, RoundingMode.HALF_UP), t.getType(), t.getStatus(), t.getCreatedAt());
+        return new TransferResponse(
+                t.getId(),
+                t.getSender().getId(),
+                t.getRecipient().getId(),
+                t.getAmount().setScale(2, RoundingMode.HALF_UP),
+                t.getType(),
+                t.getStatus(),
+                t.getCreatedAt()
+        );
     }
 }
