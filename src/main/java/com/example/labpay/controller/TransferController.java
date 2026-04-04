@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,16 +22,19 @@ public class TransferController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
     public TransferResponse create(Authentication auth, @Valid @RequestBody TransferRequest request) {
         return transferService.createTransfer(auth.getName(), request);
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
     public TransferResponse get(@PathVariable Long id) {
         return transferService.getTransfer(id);
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
     public ListResponse<TransferResponse> list(Authentication auth) {
         return new ListResponse<>(transferService.getUserTransfers(auth.getName()));
     }

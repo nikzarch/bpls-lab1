@@ -43,7 +43,7 @@ springdoc:
 
 app:
   bank:
-    url: localhost:9000
+    url: http://localhost:9090
   jwt:
     secret: "nobodygonnastealmyjwtsecretisnthe1234567"
     expiration-ms: 3600000

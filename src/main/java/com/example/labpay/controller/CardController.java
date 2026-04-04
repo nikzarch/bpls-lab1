@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,22 +24,26 @@ public class CardController {
 
     @PostMapping("/bind")
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
     public BindCardResultResponse bind(Authentication auth, @Valid @RequestBody BindCardRequest request) {
         return cardService.bindCard(auth.getName(), request);
     }
 
     @PostMapping("/confirm-3ds")
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
     public CardResponse confirm3ds(Authentication auth, @Valid @RequestBody Confirm3dsRequest request) {
         return cardService.confirm3ds(auth.getName(), request);
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
     public ListResponse<CardResponse> list(Authentication auth) {
         return new ListResponse<>(cardService.getUserCards(auth.getName()));
     }
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
     public void delete(Authentication auth, @PathVariable Long id) {
         cardService.deleteCard(auth.getName(), id);
     }

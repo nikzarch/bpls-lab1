@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,22 +24,26 @@ public class WidgetController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('MERCHANT', 'ADMIN')")
     public WidgetResponse create(Authentication auth, @Valid @RequestBody CreateWidgetRequest request) {
         return widgetService.createWidget(auth.getName(), request);
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('MERCHANT', 'ADMIN')")
     public ListResponse<WidgetResponse> list(Authentication auth) {
         return new ListResponse<>(widgetService.getMerchantWidgets(auth.getName()));
     }
 
     @PostMapping("/{widgetId}/products")
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('MERCHANT', 'ADMIN')")
     public ProductResponse createProduct(Authentication auth, @PathVariable Long widgetId, @Valid @RequestBody CreateProductRequest request) {
         return widgetService.createProduct(auth.getName(), widgetId, request);
     }
 
     @GetMapping("/{widgetId}/products")
+    @PreAuthorize("isAuthenticated()")
     public ListResponse<ProductResponse> listProducts(@PathVariable Long widgetId) {
         return new ListResponse<>(widgetService.getWidgetProducts(widgetId));
     }
