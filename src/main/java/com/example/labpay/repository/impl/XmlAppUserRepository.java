@@ -4,7 +4,6 @@ import com.example.labpay.exception.BusinessException;
 import com.example.labpay.repository.AppUserRepository;
 import com.example.labpay.xml.XmlAppUser;
 import com.example.labpay.xml.XmlAppUsers;
-
 import jakarta.xml.bind.JAXBContext;
 import jakarta.xml.bind.Marshaller;
 import jakarta.xml.bind.Unmarshaller;
@@ -15,7 +14,6 @@ import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Repository;
 
 import java.io.File;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -51,8 +49,10 @@ public class XmlAppUserRepository implements AppUserRepository {
     public XmlAppUser save(XmlAppUser user) {
         List<XmlAppUser> users = new ArrayList<>(readAll());
 
-        users.removeIf(u -> u.getId().equals(user.getId()) ||
-                u.getUsername().equalsIgnoreCase(user.getUsername()));
+        users.removeIf(u ->
+                (user.getId() != null && user.getId().equals(u.getId())) ||
+                        u.getUsername().equalsIgnoreCase(user.getUsername())
+        );
 
         if (user.getId() == null) {
             long nextId = users.stream()
@@ -105,6 +105,7 @@ public class XmlAppUserRepository implements AppUserRepository {
             throw new BusinessException("Cannot write users to XML");
         }
     }
+
     private File getOrCreateXmlFile() {
         try {
             File file = xmlResource.getFile();
