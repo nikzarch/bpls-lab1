@@ -69,6 +69,10 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException("Invalid credentials");
         }
 
+        if (walletRepository.findByUserId(user.getId()).isEmpty()) {
+            walletRepository.save(Wallet.builder().userId(user.getId()).build());
+        }
+
         return new AuthResponse(jwtService.generateToken(user));
     }
 }
