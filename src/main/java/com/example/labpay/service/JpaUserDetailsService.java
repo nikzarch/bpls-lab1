@@ -23,7 +23,7 @@ public class JpaUserDetailsService implements UserDetailsService {
         return new User(
                 user.getUsername(),
                 user.getPasswordHash(),
-                List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()))
+                List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole()))
         );
     }
 }

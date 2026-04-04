@@ -2,7 +2,6 @@ package com.example.labpay.service.impl;
 
 import com.example.labpay.domain.transfer.Transfer;
 import com.example.labpay.domain.transfer.TransferStatus;
-import com.example.labpay.domain.user.AppUser;
 import com.example.labpay.domain.wallet.TransactionType;
 import com.example.labpay.dto.request.TransferRequest;
 import com.example.labpay.dto.response.TransferResponse;
@@ -15,6 +14,7 @@ import com.example.labpay.service.UserService;
 import com.example.labpay.service.WalletService;
 import com.example.labpay.transaction.TransactionManagerFacade;
 import com.example.labpay.transaction.TransactionOptions;
+import com.example.labpay.xml.XmlAppUser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -43,8 +43,8 @@ public class TransferServiceImpl implements TransferService {
         Transfer transfer = transactionManagerFacade.execute(
                 TransactionOptions.defaults("create-transfer-transaction"),
                 () -> {
-                    AppUser sender = userService.getByUsername(username);
-                    AppUser recipient = appUserRepository.findById(request.recipientId())
+                    XmlAppUser sender = userService.getByUsername(username);
+                    XmlAppUser recipient = appUserRepository.findById(request.recipientId())
                             .orElseThrow(() -> new NotFoundException("Recipient not found"));
 
                     if (sender.getId().equals(recipient.getId())) {
@@ -66,8 +66,8 @@ public class TransferServiceImpl implements TransferService {
                     }
 
                     Transfer created = transferRepository.save(Transfer.builder()
-                            .sender(sender)
-                            .recipient(recipient)
+                            .senderId(sender.getId())
+                            .recipientId(recipient.getId())
                             .amount(amount)
                             .type(request.type())
                             .status(TransferStatus.PENDING)
@@ -114,7 +114,7 @@ public class TransferServiceImpl implements TransferService {
 
     @Override
     public List<TransferResponse> getUserTransfers(String username) {
-        AppUser user = userService.getByUsername(username);
+        XmlAppUser user = userService.getByUsername(username);
         return transferRepository.findBySenderIdOrRecipientIdOrderByCreatedAtDesc(user.getId(), user.getId()).stream()
                 .map(this::toResponse)
                 .toList();
@@ -123,8 +123,8 @@ public class TransferServiceImpl implements TransferService {
     private TransferResponse toResponse(Transfer t) {
         return new TransferResponse(
                 t.getId(),
-                t.getSender().getId(),
-                t.getRecipient().getId(),
+                t.getSenderId(),
+                t.getRecipientId(),
                 t.getAmount().setScale(2, RoundingMode.HALF_UP),
                 t.getType(),
                 t.getStatus(),

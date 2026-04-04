@@ -2,7 +2,6 @@ package com.example.labpay.service.impl;
 
 import com.example.labpay.domain.card.BankCard;
 import com.example.labpay.domain.card.CardStatus;
-import com.example.labpay.domain.user.AppUser;
 import com.example.labpay.domain.wallet.TransactionType;
 import com.example.labpay.domain.wallet.Wallet;
 import com.example.labpay.domain.wallet.WalletTransaction;
@@ -20,6 +19,7 @@ import com.example.labpay.service.WalletService;
 import com.example.labpay.transaction.TransactionManagerFacade;
 import com.example.labpay.transaction.TransactionOptions;
 import com.example.labpay.util.CardTokenizer;
+import com.example.labpay.xml.XmlAppUser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -45,7 +45,7 @@ public class WalletServiceImpl implements WalletService {
 
     @Override
     public WalletResponse getWallet(String username) {
-        AppUser user = userService.getByUsername(username);
+        XmlAppUser user = userService.getByUsername(username);
         Wallet wallet = getWalletByUserId(user.getId());
         return new WalletResponse(wallet.getId(), wallet.getBalance().setScale(2, RoundingMode.HALF_UP));
     }
@@ -55,11 +55,11 @@ public class WalletServiceImpl implements WalletService {
         Wallet wallet = transactionManagerFacade.execute(
                 TransactionOptions.defaults("wallet-topup-transaction"),
                 () -> {
-                    AppUser user = userService.getByUsername(username);
+                    XmlAppUser user = userService.getByUsername(username);
                     BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);
 
                     BankCard card = bankCardRepository.findByToken(request.cardToken())
-                            .filter(c -> c.getOwner().getId().equals(user.getId()))
+                            .filter(c -> c.getUserId().equals(user.getId()))
                             .orElseThrow(() -> new NotFoundException("Card not found"));
 
                     if (card.getStatus() != CardStatus.ACTIVE) {
@@ -88,7 +88,7 @@ public class WalletServiceImpl implements WalletService {
 
     @Override
     public List<TransactionResponse> getTransactions(String username) {
-        AppUser user = userService.getByUsername(username);
+        XmlAppUser user = userService.getByUsername(username);
         Wallet wallet = getWalletByUserId(user.getId());
         return transactionRepository.findByWalletIdOrderByCreatedAtDesc(wallet.getId()).stream()
                 .map(t -> new TransactionResponse(
@@ -146,7 +146,7 @@ public class WalletServiceImpl implements WalletService {
     }
 
     private Wallet getWalletByUserId(Long userId) {
-        return walletRepository.findByOwnerId(userId)
+        return walletRepository.findByUserId(userId)
                 .orElseThrow(() -> new NotFoundException("Wallet not found"));
     }
 }

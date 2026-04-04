@@ -1,6 +1,5 @@
 package com.example.labpay.service.impl;
 
-import com.example.labpay.domain.user.AppUser;
 import com.example.labpay.domain.user.Role;
 import com.example.labpay.domain.wallet.Wallet;
 import com.example.labpay.dto.request.LoginRequest;
@@ -13,8 +12,10 @@ import com.example.labpay.service.AuthService;
 import com.example.labpay.service.JwtService;
 import com.example.labpay.transaction.TransactionManagerFacade;
 import com.example.labpay.transaction.TransactionOptions;
+import com.example.labpay.xml.XmlAppUser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -23,6 +24,8 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
+
+    @Qualifier("XmlAppUserRepository")
     private final AppUserRepository appUserRepository;
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
@@ -31,7 +34,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse register(RegisterRequest request) {
-        AppUser user = transactionManagerFacade.execute(
+        XmlAppUser user = transactionManagerFacade.execute(
                 TransactionOptions.defaults("register-user-transaction"),
                 () -> {
                     if (appUserRepository.findByUsername(request.username()).isPresent()) {
@@ -40,13 +43,13 @@ public class AuthServiceImpl implements AuthService {
 
                     Role role = request.role() == null ? Role.CUSTOMER : request.role();
 
-                    AppUser savedUser = appUserRepository.save(AppUser.builder()
+                    XmlAppUser savedUser = appUserRepository.save(XmlAppUser.builder()
                             .username(request.username())
                             .passwordHash(passwordEncoder.encode(request.password()))
-                            .role(role)
+                            .role(role.toString())
                             .build());
 
-                    walletRepository.save(Wallet.builder().owner(savedUser).build());
+                    walletRepository.save(Wallet.builder().userId(savedUser.getId()).build());
 
                     return savedUser;
                 },
@@ -59,7 +62,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse login(LoginRequest request) {
-        AppUser user = appUserRepository.findByUsername(request.username())
+        XmlAppUser user = appUserRepository.findByUsername(request.username())
                 .orElseThrow(() -> new BusinessException("Invalid credentials"));
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {

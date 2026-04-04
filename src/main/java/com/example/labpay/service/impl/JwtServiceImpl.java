@@ -1,7 +1,7 @@
 package com.example.labpay.service.impl;
 
-import com.example.labpay.domain.user.AppUser;
 import com.example.labpay.service.JwtService;
+import com.example.labpay.xml.XmlAppUser;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -30,13 +30,13 @@ public class JwtServiceImpl implements JwtService {
     }
 
     @Override
-    public String generateToken(AppUser user) {
+    public String generateToken(XmlAppUser user) {
         Date now = new Date();
         Date exp = new Date(now.getTime() + expirationMs);
 
         return Jwts.builder()
                 .subject(user.getUsername())
-                .claim("role", user.getRole().name())
+                .claim("role", user.getRole())
                 .issuedAt(now)
                 .expiration(exp)
                 .signWith(key)

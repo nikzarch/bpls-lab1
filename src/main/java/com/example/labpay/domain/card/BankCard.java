@@ -1,6 +1,5 @@
 package com.example.labpay.domain.card;
 
-import com.example.labpay.domain.user.AppUser;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -12,9 +11,8 @@ public class BankCard {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "user_id")
-    private AppUser owner;
+    @Column(nullable = false,name = "user_id")
+    private Long userId;
 
     @Column(nullable = false, unique = true)
     private String token;

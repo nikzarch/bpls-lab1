@@ -3,7 +3,6 @@ package com.example.labpay.service.impl;
 import com.example.labpay.domain.card.BankCard;
 import com.example.labpay.domain.card.CardBindingSession;
 import com.example.labpay.domain.card.CardStatus;
-import com.example.labpay.domain.user.AppUser;
 import com.example.labpay.dto.request.BindCardRequest;
 import com.example.labpay.dto.request.Confirm3dsRequest;
 import com.example.labpay.dto.response.BindCardResultResponse;
@@ -18,6 +17,7 @@ import com.example.labpay.service.UserService;
 import com.example.labpay.transaction.TransactionManagerFacade;
 import com.example.labpay.transaction.TransactionOptions;
 import com.example.labpay.util.CardTokenizer;
+import com.example.labpay.xml.XmlAppUser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -44,7 +44,7 @@ public class CardServiceImpl implements CardService {
         return transactionManagerFacade.execute(
                 TransactionOptions.defaults("bind-card-transaction"),
                 () -> {
-                    AppUser user = userService.getByUsername(username);
+                    XmlAppUser user = userService.getByUsername(username);
                     String digits = request.cardNumber().replaceAll("\\s+", "");
 
                     if (!CardTokenizer.isValidLuhn(digits)) {
@@ -59,7 +59,7 @@ public class CardServiceImpl implements CardService {
                     }
 
                     String masked = CardTokenizer.maskCardNumber(digits);
-                    if (bankCardRepository.existsByOwnerIdAndMaskedCardNumber(user.getId(), masked)) {
+                    if (bankCardRepository.existsByUserIdAndMaskedCardNumber(user.getId(), masked)) {
                         throw new BusinessException("Card already bound");
                     }
 
@@ -67,7 +67,7 @@ public class CardServiceImpl implements CardService {
 
                     sessionRepository.save(CardBindingSession.builder()
                             .sessionId(bankSessionId)
-                            .user(user)
+                            .userId(user.getId())
                             .encryptedCardNumber(cardTokenizer.encrypt(digits))
                             .holderName(request.holderName())
                             .maskedCardNumber(masked)
@@ -99,8 +99,8 @@ public class CardServiceImpl implements CardService {
                         throw new BusinessException("Session expired");
                     }
 
-                    AppUser user = userService.getByUsername(username);
-                    if (!session.getUser().getId().equals(user.getId())) {
+                    XmlAppUser user = userService.getByUsername(username);
+                    if (!session.getUserId().equals(user.getId())) {
                         throw new BusinessException("Session does not belong to user");
                     }
 
@@ -112,12 +112,12 @@ public class CardServiceImpl implements CardService {
                     String cardNumber = cardTokenizer.decrypt(session.getEncryptedCardNumber());
                     String masked = CardTokenizer.maskCardNumber(cardNumber);
 
-                    if (bankCardRepository.existsByOwnerIdAndMaskedCardNumber(user.getId(), masked)) {
+                    if (bankCardRepository.existsByUserIdAndMaskedCardNumber(user.getId(), masked)) {
                         throw new BusinessException("Card already bound");
                     }
 
                     BankCard card = bankCardRepository.save(BankCard.builder()
-                            .owner(user)
+                            .userId(user.getId())
                             .token(CardTokenizer.generateToken())
                             .maskedCardNumber(masked)
                             .holderName(session.getHolderName())
@@ -134,8 +134,8 @@ public class CardServiceImpl implements CardService {
 
     @Override
     public List<CardResponse> getUserCards(String username) {
-        AppUser user = userService.getByUsername(username);
-        return bankCardRepository.findByOwnerId(user.getId()).stream()
+        XmlAppUser user = userService.getByUsername(username);
+        return bankCardRepository.findByUserId(user.getId()).stream()
                 .map(this::toResponse)
                 .toList();
     }
@@ -145,11 +145,11 @@ public class CardServiceImpl implements CardService {
         transactionManagerFacade.execute(
                 TransactionOptions.defaults("delete-card-transaction"),
                 () -> {
-                    AppUser user = userService.getByUsername(username);
+                    XmlAppUser user = userService.getByUsername(username);
                     BankCard card = bankCardRepository.findById(cardId)
                             .orElseThrow(() -> new NotFoundException("Card not found"));
 
-                    if (!card.getOwner().getId().equals(user.getId())) {
+                    if (!card.getUserId().equals(user.getId())) {
                         throw new BusinessException("Card does not belong to user");
                     }
 

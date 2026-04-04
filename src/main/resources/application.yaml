@@ -42,6 +42,8 @@ springdoc:
 
 
 app:
+  bank:
+    url: localhost:9000
   jwt:
     secret: "nobodygonnastealmyjwtsecretisnthe1234567"
     expiration-ms: 3600000
@@ -50,4 +52,4 @@ app:
   webhook:
     secret: "webhook-hmac-secret-key-change-me"
   security:
-    users-xml-path: classpath:users.xml
+    users-xml-path: file:./users.xml

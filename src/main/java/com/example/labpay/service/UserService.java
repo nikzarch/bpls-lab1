@@ -1,8 +1,8 @@
 package com.example.labpay.service;
 
-import com.example.labpay.domain.user.AppUser;
+import com.example.labpay.xml.XmlAppUser;
 
 public interface UserService {
-     AppUser getByUsername(String username);
+     XmlAppUser getByUsername(String username);
 
     }

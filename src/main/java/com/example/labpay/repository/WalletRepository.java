@@ -9,9 +9,9 @@ import org.springframework.data.jpa.repository.Query;
 import java.util.Optional;
 
 public interface WalletRepository extends JpaRepository<Wallet, Long> {
-    Optional<Wallet> findByOwnerId(Long ownerId);
+    Optional<Wallet> findByUserId(Long ownerId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("SELECT w FROM Wallet w WHERE w.owner.id = :ownerId")
+    @Query("SELECT w FROM Wallet w WHERE w.userId = :ownerId")
     Optional<Wallet> findByOwnerIdForUpdate(Long ownerId);
 }

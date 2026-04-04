@@ -1,13 +1,11 @@
 package com.example.labpay.domain;
 
-import com.example.labpay.domain.user.AppUser;
 import com.example.labpay.domain.widget.ProductOffer;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.OffsetDateTime;
 
 @Entity
 @Table(name = "payment_orders")
@@ -25,9 +23,8 @@ public class PaymentOrder {
     @JoinColumn(name = "product_id")
     private ProductOffer product;
 
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "buyer_id")
-    private AppUser buyer;
+    @Column(nullable = false,name = "buyer_id")
+    private Long buyerId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

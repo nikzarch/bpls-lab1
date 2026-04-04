@@ -1,6 +1,5 @@
 package com.example.labpay.domain.wallet;
 
-import com.example.labpay.domain.user.AppUser;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -18,9 +17,8 @@ public class Wallet {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @OneToOne(optional = false)
-    @JoinColumn(name = "user_id", unique = true)
-    private AppUser owner;
+    @Column(nullable = false,name = "user_id")
+    private Long userId;
 
     @Column(nullable = false, precision = 19, scale = 2)
     @Builder.Default

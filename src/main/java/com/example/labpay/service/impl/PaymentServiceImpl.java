@@ -4,7 +4,6 @@ import com.example.labpay.domain.OrderStatus;
 import com.example.labpay.domain.PaymentOrder;
 import com.example.labpay.domain.card.BankCard;
 import com.example.labpay.domain.card.CardStatus;
-import com.example.labpay.domain.user.AppUser;
 import com.example.labpay.domain.wallet.TransactionType;
 import com.example.labpay.domain.widget.ProductOffer;
 import com.example.labpay.domain.widget.Widget;
@@ -26,6 +25,7 @@ import com.example.labpay.transaction.TransactionManagerFacade;
 import com.example.labpay.transaction.TransactionOptions;
 import com.example.labpay.util.CardTokenizer;
 import com.example.labpay.util.HmacUtil;
+import com.example.labpay.xml.XmlAppUser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -59,7 +59,7 @@ public class PaymentServiceImpl implements PaymentService {
         PaymentOrder order = transactionManagerFacade.execute(
                 TransactionOptions.defaults("create-payment-order-transaction"),
                 () -> {
-                    AppUser buyer = userService.getByUsername(username);
+                    XmlAppUser buyer = userService.getByUsername(username);
 
                     Widget widget = widgetRepository.findById(request.widgetId())
                             .orElseThrow(() -> new NotFoundException("Widget not found"));
@@ -73,7 +73,7 @@ public class PaymentServiceImpl implements PaymentService {
 
                     return orderRepository.save(PaymentOrder.builder()
                             .product(product)
-                            .buyer(buyer)
+                            .buyerId(buyer.getId())
                             .status(OrderStatus.CREATED)
                             .amount(product.getPrice().setScale(2, RoundingMode.HALF_UP))
                             .externalOrderId(UUID.randomUUID().toString())
@@ -92,11 +92,11 @@ public class PaymentServiceImpl implements PaymentService {
         PaymentOrder order = transactionManagerFacade.execute(
                 TransactionOptions.defaults("process-payment-transaction"),
                 () -> {
-                    AppUser buyer = userService.getByUsername(username);
+                    XmlAppUser buyer = userService.getByUsername(username);
                     PaymentOrder currentOrder = orderRepository.findById(request.orderId())
                             .orElseThrow(() -> new NotFoundException("Order not found"));
 
-                    if (!currentOrder.getBuyer().getId().equals(buyer.getId())) {
+                    if (!currentOrder.getBuyerId().equals(buyer.getId())) {
                         throw new BusinessException("Order does not belong to user");
                     }
                     if (currentOrder.getStatus() != OrderStatus.CREATED) {
@@ -120,7 +120,7 @@ public class PaymentServiceImpl implements PaymentService {
                             }
 
                             BankCard card = bankCardRepository.findByToken(request.cardToken())
-                                    .filter(c -> c.getOwner().getId().equals(buyer.getId()))
+                                    .filter(c -> c.getUserId().equals(buyer.getId()))
                                     .orElseThrow(() -> new NotFoundException("Card not found"));
 
                             if (card.getStatus() != CardStatus.ACTIVE) {
@@ -133,7 +133,7 @@ public class PaymentServiceImpl implements PaymentService {
                     }
 
                     walletService.credit(
-                            widget.getMerchant().getId(),
+                            widget.getMerchantId(),
                             currentOrder.getAmount(),
                             opId,
                             "Income from order " + currentOrder.getExternalOrderId(),
@@ -154,11 +154,11 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     public PaymentOrderResponse getOrder(String username, Long orderId) {
-        AppUser user = userService.getByUsername(username);
+        XmlAppUser user = userService.getByUsername(username);
         PaymentOrder order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new NotFoundException("Order not found"));
 
-        if (!order.getBuyer().getId().equals(user.getId())) {
+        if (!order.getBuyerId().equals(user.getId())) {
             throw new BusinessException("You are not the buyer of this order");
         }
 
@@ -167,7 +167,7 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     public List<PaymentOrderResponse> getUserOrders(String username) {
-        AppUser user = userService.getByUsername(username);
+        XmlAppUser user = userService.getByUsername(username);
         return orderRepository.findByBuyerId(user.getId()).stream()
                 .map(this::toResponse)
                 .toList();

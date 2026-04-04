@@ -1,6 +1,5 @@
 package com.example.labpay.domain.widget;
 
-import com.example.labpay.domain.user.AppUser;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -16,9 +15,8 @@ public class Widget {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "merchant_id")
-    private AppUser merchant;
+    @Column(nullable = false,name = "merchant_id")
+    private Long merchantId;
 
     @Column(nullable = false)
     private String name;

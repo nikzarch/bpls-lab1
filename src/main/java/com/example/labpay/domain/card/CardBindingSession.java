@@ -1,6 +1,5 @@
 package com.example.labpay.domain.card;
 
-import com.example.labpay.domain.user.AppUser;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -17,9 +16,8 @@ public class CardBindingSession {
     @Column(nullable = false, unique = true)
     private String sessionId;
 
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "user_id")
-    private AppUser user;
+    @Column(nullable = false,name = "user_id")
+    private Long userId;
 
     @Column(nullable = false)
     private String encryptedCardNumber;

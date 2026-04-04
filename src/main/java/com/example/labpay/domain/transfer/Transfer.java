@@ -1,6 +1,5 @@
 package com.example.labpay.domain.transfer;
 
-import com.example.labpay.domain.user.AppUser;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -15,13 +14,11 @@ public class Transfer {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "sender_id")
-    private AppUser sender;
+    @Column(nullable = false,name = "sender_id")
+    private Long senderId;
 
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "recipient_id")
-    private AppUser recipient;
+    @Column(nullable = false,name = "recipient_id")
+    private Long recipientId;
 
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal amount;

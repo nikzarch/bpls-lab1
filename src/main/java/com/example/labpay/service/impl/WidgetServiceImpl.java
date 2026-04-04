@@ -1,6 +1,5 @@
 package com.example.labpay.service.impl;
 
-import com.example.labpay.domain.user.AppUser;
 import com.example.labpay.domain.user.Role;
 import com.example.labpay.domain.widget.ProductOffer;
 import com.example.labpay.domain.widget.Widget;
@@ -16,6 +15,7 @@ import com.example.labpay.service.UserService;
 import com.example.labpay.service.WidgetService;
 import com.example.labpay.transaction.TransactionManagerFacade;
 import com.example.labpay.transaction.TransactionOptions;
+import com.example.labpay.xml.XmlAppUser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -38,13 +38,13 @@ public class WidgetServiceImpl implements WidgetService {
         Widget widget = transactionManagerFacade.execute(
                 TransactionOptions.defaults("create-widget-transaction"),
                 () -> {
-                    AppUser merchant = userService.getByUsername(username);
-                    if (merchant.getRole() != Role.MERCHANT) {
+                    XmlAppUser merchant = userService.getByUsername(username);
+                    if (Role.valueOf(merchant.getRole()) != Role.MERCHANT) {
                         throw new BusinessException("Only merchants can create widgets");
                     }
 
                     return widgetRepository.save(Widget.builder()
-                            .merchant(merchant)
+                            .merchantId(merchant.getId())
                             .name(request.name())
                             .callbackUrl(request.callbackUrl())
                             .build());
@@ -58,7 +58,7 @@ public class WidgetServiceImpl implements WidgetService {
 
     @Override
     public List<WidgetResponse> getMerchantWidgets(String username) {
-        AppUser merchant = userService.getByUsername(username);
+        XmlAppUser merchant = userService.getByUsername(username);
         return widgetRepository.findByMerchantId(merchant.getId()).stream()
                 .map(this::toResponse)
                 .toList();
@@ -69,11 +69,11 @@ public class WidgetServiceImpl implements WidgetService {
         ProductOffer product = transactionManagerFacade.execute(
                 TransactionOptions.defaults("create-product-transaction"),
                 () -> {
-                    AppUser merchant = userService.getByUsername(username);
+                    XmlAppUser merchant = userService.getByUsername(username);
                     Widget widget = widgetRepository.findById(widgetId)
                             .orElseThrow(() -> new NotFoundException("Widget not found"));
 
-                    if (!widget.getMerchant().getId().equals(merchant.getId())) {
+                    if (!widget.getMerchantId().equals(merchant.getId())) {
                         throw new BusinessException("Widget does not belong to merchant");
                     }
 
@@ -118,7 +118,7 @@ public class WidgetServiceImpl implements WidgetService {
                 w.getId(),
                 w.getName(),
                 w.getCallbackUrl(),
-                w.getMerchant().getId()
+                w.getMerchantId()
         );
     }
 
