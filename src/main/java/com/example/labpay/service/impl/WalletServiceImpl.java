@@ -106,7 +106,7 @@ public class WalletServiceImpl implements WalletService {
         amount = amount.setScale(2, RoundingMode.HALF_UP);
 
         Wallet wallet = walletRepository.findByOwnerIdForUpdate(userId)
-                .orElseThrow(() -> new NotFoundException("Wallet not found"));
+            .orElseGet(() -> walletRepository.save(Wallet.builder().userId(userId).build()));
 
         if (wallet.getBalance().compareTo(amount) < 0) {
             throw new BusinessException("Insufficient funds");
@@ -130,7 +130,7 @@ public class WalletServiceImpl implements WalletService {
         amount = amount.setScale(2, RoundingMode.HALF_UP);
 
         Wallet wallet = walletRepository.findByOwnerIdForUpdate(userId)
-                .orElseThrow(() -> new NotFoundException("Wallet not found"));
+            .orElseGet(() -> walletRepository.save(Wallet.builder().userId(userId).build()));
 
         wallet.setBalance(wallet.getBalance().add(amount));
         walletRepository.save(wallet);
@@ -147,6 +147,6 @@ public class WalletServiceImpl implements WalletService {
 
     private Wallet getWalletByUserId(Long userId) {
         return walletRepository.findByUserId(userId)
-                .orElseThrow(() -> new NotFoundException("Wallet not found"));
+                .orElseGet(() -> walletRepository.save(Wallet.builder().userId(userId).build()));
     }
 }
