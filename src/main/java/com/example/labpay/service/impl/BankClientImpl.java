@@ -1,102 +1,101 @@
 package com.example.labpay.service.impl;
 
 import com.example.labpay.exception.BusinessException;
+import com.example.labpay.mq.BankCommandMessage;
+import com.example.labpay.mq.BankReplyMessage;
 import com.example.labpay.service.BankClient;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.beans.factory.annotation.Value;
+import lombok.RequiredArgsConstructor;
+import org.springframework.jms.core.JmsTemplate;
 import org.springframework.stereotype.Service;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.util.Map;
+import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class BankClientImpl implements BankClient {
 
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+    private final JmsTemplate jmsTemplate;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    @Value("${app.bank.url:http://localhost:9090}")
-    private String bankUrl;
+    private static final String REQUEST_QUEUE = "bank.requests";
+    private static final String RESPONSE_QUEUE = "bank.responses";
+
+    private BankReplyMessage call(String op, Object payloadObj) {
+        try {
+            String correlationId = UUID.randomUUID().toString();
+
+            String payload = mapper.writeValueAsString(payloadObj);
+
+            BankCommandMessage cmd =
+                    new BankCommandMessage(correlationId, op, payload, RESPONSE_QUEUE);
+
+            jmsTemplate.convertAndSend(REQUEST_QUEUE, mapper.writeValueAsString(cmd));
+
+            String raw = (String) jmsTemplate.receiveAndConvert(RESPONSE_QUEUE);
+
+            BankReplyMessage reply =
+                    mapper.readValue(raw, BankReplyMessage.class);
+
+            if (!reply.correlationId().equals(correlationId)) {
+                throw new BusinessException("Invalid bank reply");
+            }
+
+            if (!reply.ok()) {
+                throw new BusinessException(reply.error());
+            }
+
+            return reply;
+
+        } catch (Exception e) {
+            throw new BusinessException("Bank unavailable");
+        }
+    }
 
     @Override
     public String initiateBind(String cardNumber, String cvv, String expiry) {
-        String body = mapper.createObjectNode()
-                .put("card_number", cardNumber)
-                .put("cvv", cvv)
-                .put("expiry", expiry)
-                .toString();
-        JsonNode resp = post("/bind", body);
-        if (!resp.get("ok").asBoolean()) {
-            throw new BusinessException("Bank rejected card: " + resp.get("error").asText());
-        }
-        return resp.get("session_id").asText();
+        return call("INIT_BIND",
+                Map.of(
+                        "cardNumber", cardNumber,
+                        "cvv", cvv,
+                        "expiry", expiry
+                )).payload();
     }
 
     @Override
     public void confirm3ds(String sessionId, String code) {
-        String body = mapper.createObjectNode()
-                .put("session_id", sessionId)
-                .put("code", code)
-                .toString();
-        JsonNode resp = post("/confirm-3ds", body);
-        if (!resp.get("ok").asBoolean()) {
-            throw new BusinessException("3DS failed: " + resp.get("error").asText());
-        }
+        call("CONFIRM_3DS",
+                Map.of(
+                        "sessionId", sessionId,
+                        "code", code
+                ));
     }
 
     @Override
     public String initiateCharge(String cardNumber, double amount) {
-        String body = mapper.createObjectNode()
-                .put("card_number", cardNumber)
-                .put("amount", amount)
-                .toString();
-        JsonNode resp = post("/charge", body);
-        if (!resp.get("ok").asBoolean()) {
-            throw new BusinessException("Charge failed: " + resp.get("error").asText());
-        }
-        return resp.get("session_id").asText();
+        return call("INIT_CHARGE",
+                Map.of(
+                        "cardNumber", cardNumber,
+                        "amount", amount
+                )).payload();
     }
 
     @Override
     public void completeCharge(String sessionId, double amount) {
-        String body = mapper.createObjectNode()
-                .put("session_id", sessionId)
-                .put("amount", amount)
-                .toString();
-        JsonNode resp = post("/complete-charge", body);
-        if (!resp.get("ok").asBoolean()) {
-            throw new BusinessException("Charge completion failed: " + resp.get("error").asText());
-        }
+        call("COMPLETE_CHARGE",
+                Map.of(
+                        "sessionId", sessionId,
+                        "amount", amount
+                ));
     }
 
     @Override
     public void directCharge(String cardNumber, double amount) {
-        String body = mapper.createObjectNode()
-                .put("card_number", cardNumber)
-                .put("amount", amount)
-                .toString();
-        JsonNode resp = post("/direct-charge", body);
-        if (!resp.get("ok").asBoolean()) {
-            throw new BusinessException("Direct charge failed: " + resp.get("error").asText());
-        }
-    }
-
-    private JsonNode post(String path, String body) {
-        try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(bankUrl + path))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(body))
-                    .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            return mapper.readTree(response.body());
-        } catch (BusinessException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new BusinessException("Bank service unavailable");
-        }
+        call("DIRECT_CHARGE",
+                Map.of(
+                        "cardNumber", cardNumber,
+                        "amount", amount
+                ));
     }
 }

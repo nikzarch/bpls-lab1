@@ -24,7 +24,8 @@ spring:
         service: labpay
         max-timeout: 300000
         default-jta-timeout: 30000
-
+  jms:
+    pub-sub-domain: false
   datasource:
     xa:
       data-source-class-name: org.postgresql.xa.PGXADataSource
