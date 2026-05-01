@@ -41,6 +41,11 @@ springdoc:
   api-docs:
     path: /api/api-docs
 
+rabbit:
+  host: localhost
+  port: 5672
+  username: admin
+  password: admin
 
 app:
   bank:
