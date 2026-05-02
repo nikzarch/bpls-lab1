@@ -1,5 +1,6 @@
 package com.example.labpay.service;
 
+import com.example.labpay.domain.wallet.TransactionType;
 import com.example.labpay.dto.request.TopUpRequest;
 import com.example.labpay.dto.response.TransactionResponse;
 import com.example.labpay.dto.response.WalletResponse;
@@ -11,6 +12,12 @@ public interface WalletService {
     WalletResponse getWallet(String username);
     WalletResponse topUp(String username, TopUpRequest request);
     List<TransactionResponse> getTransactions(String username);
-    void debit(Long userId, BigDecimal amount, String operationId, String description, com.example.labpay.domain.wallet.TransactionType type);
-    void credit(Long userId, BigDecimal amount, String operationId, String description, com.example.labpay.domain.wallet.TransactionType type);
+
+    void debit(Long userId, BigDecimal amount, String operationId, String description, TransactionType type);
+    void credit(Long userId, BigDecimal amount, String operationId, String description, TransactionType type);
+
+    String placeHold(Long userId, BigDecimal amount, String externalRef, String reason);
+    void captureHold(String externalRef, TransactionType type);
+    void releaseHold(String externalRef);
+    BigDecimal getAvailableBalance(Long userId);
 }

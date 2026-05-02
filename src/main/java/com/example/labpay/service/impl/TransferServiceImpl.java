@@ -7,6 +7,8 @@ import com.example.labpay.dto.request.TransferRequest;
 import com.example.labpay.dto.response.TransferResponse;
 import com.example.labpay.exception.BusinessException;
 import com.example.labpay.exception.NotFoundException;
+import com.example.labpay.mq.EventPublisher;
+import com.example.labpay.mq.events.NotificationEvent;
 import com.example.labpay.repository.AppUserRepository;
 import com.example.labpay.repository.TransferRepository;
 import com.example.labpay.service.TransferService;
@@ -37,6 +39,7 @@ public class TransferServiceImpl implements TransferService {
     private final UserService userService;
     private final WalletService walletService;
     private final TransactionManagerFacade transactionManagerFacade;
+    private final EventPublisher eventPublisher;
 
     @Override
     public TransferResponse createTransfer(String username, TransferRequest request) {
@@ -75,28 +78,40 @@ public class TransferServiceImpl implements TransferService {
                             .createdAt(Instant.now())
                             .build());
 
-                    String opId = UUID.randomUUID().toString();
-
-                    walletService.debit(
+                    String holdRef = "transfer-" + idempotencyKey;
+                    walletService.placeHold(
                             sender.getId(),
                             amount,
-                            opId,
-                            "Transfer to user #" + recipient.getId(),
-                            TransactionType.WALLET_TRANSFER_OUT
+                            holdRef,
+                            "Transfer to user #" + recipient.getId()
                     );
 
-                    walletService.credit(
-                            recipient.getId(),
-                            amount,
-                            opId,
-                            "Transfer from user #" + sender.getId(),
-                            TransactionType.WALLET_TRANSFER_IN
-                    );
+                    try {
+                        walletService.captureHold(holdRef, TransactionType.WALLET_TRANSFER_OUT);
+                        walletService.credit(
+                                recipient.getId(),
+                                amount,
+                                holdRef,
+                                "Transfer from user #" + sender.getId(),
+                                TransactionType.WALLET_TRANSFER_IN
+                        );
+                    } catch (RuntimeException e) {
+                        walletService.releaseHold(holdRef);
+                        throw e;
+                    }
 
                     created.setStatus(TransferStatus.SUCCESS);
                     created.setCompletedAt(Instant.now());
+                    Transfer saved = transferRepository.save(created);
 
-                    return transferRepository.save(created);
+                    eventPublisher.publishNotification(new NotificationEvent(
+                            "TRANSFER_RECEIVED",
+                            recipient.getId(),
+                            amount,
+                            "Получен перевод от пользователя #" + sender.getId()
+                    ));
+
+                    return saved;
                 },
                 committedTransfer -> log.info("Transfer {} committed", committedTransfer.getId()),
                 ex -> log.error("Transfer rolled back for user {}: {}", username, ex.getMessage())

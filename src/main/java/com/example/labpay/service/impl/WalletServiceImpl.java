@@ -2,8 +2,10 @@ package com.example.labpay.service.impl;
 
 import com.example.labpay.domain.card.BankCard;
 import com.example.labpay.domain.card.CardStatus;
+import com.example.labpay.domain.wallet.HoldStatus;
 import com.example.labpay.domain.wallet.TransactionType;
 import com.example.labpay.domain.wallet.Wallet;
+import com.example.labpay.domain.wallet.WalletHold;
 import com.example.labpay.domain.wallet.WalletTransaction;
 import com.example.labpay.dto.request.TopUpRequest;
 import com.example.labpay.dto.response.TransactionResponse;
@@ -11,6 +13,7 @@ import com.example.labpay.dto.response.WalletResponse;
 import com.example.labpay.exception.BusinessException;
 import com.example.labpay.exception.NotFoundException;
 import com.example.labpay.repository.BankCardRepository;
+import com.example.labpay.repository.WalletHoldRepository;
 import com.example.labpay.repository.WalletRepository;
 import com.example.labpay.repository.WalletTransactionRepository;
 import com.example.labpay.service.BankClient;
@@ -26,8 +29,10 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -35,8 +40,11 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class WalletServiceImpl implements WalletService {
 
+    private static final Duration HOLD_TTL = Duration.ofMinutes(15);
+
     private final WalletRepository walletRepository;
     private final WalletTransactionRepository transactionRepository;
+    private final WalletHoldRepository walletHoldRepository;
     private final BankCardRepository bankCardRepository;
     private final UserService userService;
     private final BankClient bankClient;
@@ -106,10 +114,13 @@ public class WalletServiceImpl implements WalletService {
         amount = amount.setScale(2, RoundingMode.HALF_UP);
 
         Wallet wallet = walletRepository.findByOwnerIdForUpdate(userId)
-            .orElseGet(() -> walletRepository.save(Wallet.builder().userId(userId).build()));
+                .orElseGet(() -> walletRepository.save(Wallet.builder().userId(userId).build()));
 
-        if (wallet.getBalance().compareTo(amount) < 0) {
-            throw new BusinessException("Insufficient funds");
+        BigDecimal heldSum = walletHoldRepository.sumActiveByWalletId(wallet.getId());
+        BigDecimal available = wallet.getBalance().subtract(heldSum);
+
+        if (available.compareTo(amount) < 0) {
+            throw new BusinessException("Insufficient available funds");
         }
 
         wallet.setBalance(wallet.getBalance().subtract(amount));
@@ -130,7 +141,7 @@ public class WalletServiceImpl implements WalletService {
         amount = amount.setScale(2, RoundingMode.HALF_UP);
 
         Wallet wallet = walletRepository.findByOwnerIdForUpdate(userId)
-            .orElseGet(() -> walletRepository.save(Wallet.builder().userId(userId).build()));
+                .orElseGet(() -> walletRepository.save(Wallet.builder().userId(userId).build()));
 
         wallet.setBalance(wallet.getBalance().add(amount));
         walletRepository.save(wallet);
@@ -143,6 +154,93 @@ public class WalletServiceImpl implements WalletService {
                 .description(description)
                 .createdAt(Instant.now())
                 .build());
+    }
+
+    @Override
+    public String placeHold(Long userId, BigDecimal amount, String externalRef, String reason) {
+        amount = amount.setScale(2, RoundingMode.HALF_UP);
+
+        Optional<WalletHold> existing = walletHoldRepository.findByExternalRef(externalRef);
+        if (existing.isPresent()) {
+            return existing.get().getExternalRef();
+        }
+
+        Wallet wallet = walletRepository.findByOwnerIdForUpdate(userId)
+                .orElseGet(() -> walletRepository.save(Wallet.builder().userId(userId).build()));
+
+        BigDecimal heldSum = walletHoldRepository.sumActiveByWalletId(wallet.getId());
+        BigDecimal available = wallet.getBalance().subtract(heldSum);
+
+        if (available.compareTo(amount) < 0) {
+            throw new BusinessException("Insufficient available funds");
+        }
+
+        walletHoldRepository.save(WalletHold.builder()
+                .wallet(wallet)
+                .amount(amount)
+                .status(HoldStatus.ACTIVE)
+                .externalRef(externalRef)
+                .reason(reason)
+                .createdAt(Instant.now())
+                .expiresAt(Instant.now().plus(HOLD_TTL))
+                .build());
+
+        return externalRef;
+    }
+
+    @Override
+    public void captureHold(String externalRef, TransactionType type) {
+        WalletHold hold = walletHoldRepository.findByExternalRef(externalRef)
+                .orElseThrow(() -> new NotFoundException("Hold not found"));
+
+        if (hold.getStatus() != HoldStatus.ACTIVE) {
+            throw new BusinessException("Hold not active: " + hold.getStatus());
+        }
+
+        Wallet wallet = walletRepository.findByOwnerIdForUpdate(hold.getWallet().getUserId())
+                .orElseThrow(() -> new BusinessException("Wallet not found"));
+
+        if (wallet.getBalance().compareTo(hold.getAmount()) < 0) {
+            throw new BusinessException("Inconsistent state: balance below hold amount");
+        }
+
+        wallet.setBalance(wallet.getBalance().subtract(hold.getAmount()));
+        walletRepository.save(wallet);
+
+        transactionRepository.save(WalletTransaction.builder()
+                .wallet(wallet)
+                .operationId(externalRef)
+                .type(type)
+                .amount(hold.getAmount().negate())
+                .description(hold.getReason())
+                .createdAt(Instant.now())
+                .build());
+
+        hold.setStatus(HoldStatus.CAPTURED);
+        hold.setResolvedAt(Instant.now());
+        walletHoldRepository.save(hold);
+    }
+
+    @Override
+    public void releaseHold(String externalRef) {
+        WalletHold hold = walletHoldRepository.findByExternalRef(externalRef)
+                .orElseThrow(() -> new NotFoundException("Hold not found"));
+
+        if (hold.getStatus() != HoldStatus.ACTIVE) {
+            return;
+        }
+
+        hold.setStatus(HoldStatus.RELEASED);
+        hold.setResolvedAt(Instant.now());
+        walletHoldRepository.save(hold);
+    }
+
+    @Override
+    public BigDecimal getAvailableBalance(Long userId) {
+        Wallet wallet = walletRepository.findByUserId(userId)
+                .orElseGet(() -> walletRepository.save(Wallet.builder().userId(userId).build()));
+        BigDecimal held = walletHoldRepository.sumActiveByWalletId(wallet.getId());
+        return wallet.getBalance().subtract(held).setScale(2, RoundingMode.HALF_UP);
     }
 
     private Wallet getWalletByUserId(Long userId) {

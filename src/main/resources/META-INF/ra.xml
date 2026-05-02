@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<connector xmlns="https://jakarta.ee/xml/ns/jakartaee"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee
+                               https://jakarta.ee/xml/ns/jakartaee/connector_2_1.xsd"
+           version="2.1">
+    <display-name>Bank Resource Adapter</display-name>
+    <vendor-name>Labpay</vendor-name>
+    <eis-type>Bank Emulator</eis-type>
+    <resourceadapter-version>1.0</resourceadapter-version>
+    <resourceadapter>
+        <resourceadapter-class>com.example.bankra.BankResourceAdapter</resourceadapter-class>
+        <outbound-resourceadapter>
+            <connection-definition>
+                <managedconnectionfactory-class>com.example.bankra.BankManagedConnectionFactory</managedconnectionfactory-class>
+                <config-property>
+                    <config-property-name>bankUrl</config-property-name>
+                    <config-property-type>java.lang.String</config-property-type>
+                    <config-property-value>http://localhost:9090</config-property-value>
+                </config-property>
+                <config-property>
+                    <config-property-name>timeoutMs</config-property-name>
+                    <config-property-type>java.lang.Integer</config-property-type>
+                    <config-property-value>5000</config-property-value>
+                </config-property>
+                <connectionfactory-interface>com.example.bankra.BankConnectionFactory</connectionfactory-interface>
+                <connectionfactory-impl-class>com.example.bankra.BankConnectionFactoryImpl</connectionfactory-impl-class>
+                <connection-interface>com.example.bankra.BankConnection</connection-interface>
+                <connection-impl-class>com.example.bankra.BankConnectionImpl</connection-impl-class>
+            </connection-definition>
+            <transaction-support>NoTransaction</transaction-support>
+            <reauthentication-support>false</reauthentication-support>
+        </outbound-resourceadapter>
+    </resourceadapter>
+</connector>

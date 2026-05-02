@@ -1,0 +1,46 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1
+      POSTGRES_DB: postgres
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    hostname: rabbitmq
+    command: bash -c "rabbitmq-plugins enable --offline rabbitmq_amqp1_0 && rabbitmq-server"
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  api:
+    build: .
+    environment:
+      SPRING_PROFILES_ACTIVE: api
+      SPRING_DATASOURCE_XA_PROPERTIES_SERVERNAME: db
+      APP_JMS_URL: amqp://admin:admin@rabbitmq:5672
+    ports: ["8080:8080"]
+    depends_on: [db, rabbitmq]
+
+  worker:
+    build: .
+    environment:
+      SPRING_PROFILES_ACTIVE: worker
+      SPRING_DATASOURCE_XA_PROPERTIES_SERVERNAME: db
+      APP_JMS_URL: amqp://admin:admin@rabbitmq:5672
+    depends_on: [db, rabbitmq]
+
+volumes:
+  db-data:
+  rabbitmq_data:

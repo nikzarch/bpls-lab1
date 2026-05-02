@@ -10,9 +10,10 @@ import com.example.labpay.domain.widget.Widget;
 import com.example.labpay.dto.request.CreatePaymentRequest;
 import com.example.labpay.dto.request.ProcessPaymentRequest;
 import com.example.labpay.dto.response.PaymentOrderResponse;
-import com.example.labpay.dto.response.WebhookPayload;
 import com.example.labpay.exception.BusinessException;
 import com.example.labpay.exception.NotFoundException;
+import com.example.labpay.mq.EventPublisher;
+import com.example.labpay.mq.events.WebhookEvent;
 import com.example.labpay.repository.BankCardRepository;
 import com.example.labpay.repository.PaymentOrderRepository;
 import com.example.labpay.repository.ProductOfferRepository;
@@ -24,11 +25,9 @@ import com.example.labpay.service.WalletService;
 import com.example.labpay.transaction.TransactionManagerFacade;
 import com.example.labpay.transaction.TransactionOptions;
 import com.example.labpay.util.CardTokenizer;
-import com.example.labpay.util.HmacUtil;
 import com.example.labpay.xml.XmlAppUser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.math.RoundingMode;
@@ -50,9 +49,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final BankClient bankClient;
     private final CardTokenizer cardTokenizer;
     private final TransactionManagerFacade transactionManagerFacade;
-
-    @Value("${app.webhook.secret:webhook-secret-key}")
-    private String webhookSecret;
+    private final EventPublisher eventPublisher;
 
     @Override
     public PaymentOrderResponse createOrder(String username, CreatePaymentRequest request) {
@@ -107,13 +104,16 @@ public class PaymentServiceImpl implements PaymentService {
                     Widget widget = currentOrder.getProduct().getWidget();
 
                     switch (request.method()) {
-                        case WALLET -> walletService.debit(
-                                buyer.getId(),
-                                currentOrder.getAmount(),
-                                opId,
-                                "Payment for order " + currentOrder.getExternalOrderId(),
-                                TransactionType.WIDGET_PAYMENT_OUT
-                        );
+                        case WALLET -> {
+                            String holdRef = "order-" + currentOrder.getExternalOrderId();
+                            walletService.placeHold(
+                                    buyer.getId(),
+                                    currentOrder.getAmount(),
+                                    holdRef,
+                                    "Hold for order " + currentOrder.getExternalOrderId()
+                            );
+                            walletService.captureHold(holdRef, TransactionType.WIDGET_PAYMENT_OUT);
+                        }
                         case CARD -> {
                             if (request.cardToken() == null || request.cardToken().isBlank()) {
                                 throw new BusinessException("Card token required for card payment");
@@ -142,10 +142,19 @@ public class PaymentServiceImpl implements PaymentService {
 
                     currentOrder.setStatus(OrderStatus.PAID);
                     currentOrder.setPaidAt(Instant.now());
+                    PaymentOrder saved = orderRepository.save(currentOrder);
 
-                    return orderRepository.save(currentOrder);
+                    eventPublisher.publishWebhook(new WebhookEvent(
+                            saved.getExternalOrderId(),
+                            widget.getCallbackUrl(),
+                            saved.getStatus().name(),
+                            saved.getAmount(),
+                            0
+                    ));
+
+                    return saved;
                 },
-                committedOrder -> sendWebhook(committedOrder, committedOrder.getProduct().getWidget()),
+                committedOrder -> log.info("Payment {} committed and webhook enqueued", committedOrder.getId()),
                 ex -> log.error("Process payment rolled back for user {}: {}", username, ex.getMessage())
         );
 
@@ -171,20 +180,6 @@ public class PaymentServiceImpl implements PaymentService {
         return orderRepository.findByBuyerId(user.getId()).stream()
                 .map(this::toResponse)
                 .toList();
-    }
-
-    private void sendWebhook(PaymentOrder order, Widget widget) {
-        String data = order.getExternalOrderId() + ":" + order.getAmount().toPlainString() + ":" + order.getStatus().name();
-        String signature = HmacUtil.sign(data, webhookSecret);
-
-        WebhookPayload payload = new WebhookPayload(
-                order.getExternalOrderId(),
-                order.getStatus().name(),
-                order.getAmount(),
-                signature
-        );
-
-        log.info("Webhook sent to {}: {}", widget.getCallbackUrl(), payload);
     }
 
     private PaymentOrderResponse toResponse(PaymentOrder o) {
