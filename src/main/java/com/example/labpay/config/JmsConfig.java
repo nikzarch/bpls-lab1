@@ -16,12 +16,18 @@ import org.springframework.jms.support.converter.MessageType;
 @EnableJms
 public class JmsConfig {
 
-    @Value("${app.jms.url:amqp://admin:admin@localhost:5672}")
+    @Value("${app.jms.url:amqp://localhost:5672}")
     private String url;
+
+    @Value("${app.jms.username:admin}")
+    private String username;
+
+    @Value("${app.jms.password:admin}")
+    private String password;
 
     @Bean
     public ConnectionFactory connectionFactory() {
-        return new JmsConnectionFactory(url);
+        return new JmsConnectionFactory(username, password, url);
     }
 
     @Bean

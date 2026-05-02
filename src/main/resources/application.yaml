@@ -51,8 +51,7 @@ app:
   bank:
     timeout-ms: 5000
   jms:
-    url: amqp://admin:admin@localhost:5672
-
+    url: amqp://localhost:5672
   jwt:
     secret: "nobodygonnastealmyjwtsecretisnthe1234567"
     expiration-ms: 3600000
