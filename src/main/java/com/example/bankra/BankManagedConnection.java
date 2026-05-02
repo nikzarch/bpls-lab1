@@ -39,6 +39,7 @@ public class BankManagedConnection implements ManagedConnection {
     private final ObjectMapper mapper = new ObjectMapper();
     private final List<ConnectionEventListener> listeners = new ArrayList<>();
     private final List<BankConnectionImpl> handles = new ArrayList<>();
+    private static final Object BANK_RPC_LOCK = new Object();
     private PrintWriter logWriter;
     private boolean destroyed;
 
@@ -161,6 +162,12 @@ public class BankManagedConnection implements ManagedConnection {
     }
 
     private String sendCommand(String operation, Map<String, Object> payload) {
+        synchronized (BANK_RPC_LOCK) {
+            return sendCommandLocked(operation, payload);
+        }
+    }
+
+    private String sendCommandLocked(String operation, Map<String, Object> payload) {
         String corrId = UUID.randomUUID().toString();
 
         try (JMSContext ctx = amqpConnectionFactory.createContext(JMSContext.AUTO_ACKNOWLEDGE)) {
@@ -172,33 +179,49 @@ public class BankManagedConnection implements ManagedConnection {
             cmd.put("operation", operation);
             cmd.put("payload", mapper.writeValueAsString(payload));
             cmd.put("replyQueue", RESPONSE_QUEUE);
+
             String cmdJson = mapper.writeValueAsString(cmd);
 
-            try (JMSConsumer consumer = ctx.createConsumer(
-                    responseQueue, "JMSCorrelationID = '" + corrId + "'")) {
-
+            try (JMSConsumer consumer = ctx.createConsumer(responseQueue)) {
                 ctx.createProducer()
                         .setJMSCorrelationID(corrId)
                         .setJMSReplyTo(responseQueue)
                         .send(requestQueue, cmdJson);
 
-                Message replyMessage = consumer.receive(timeoutMs);
-                if (replyMessage == null) {
-                    throw new BankAdapterException("Bank reply timeout for op " + operation);
+                long deadline = System.currentTimeMillis() + timeoutMs;
+
+                while (System.currentTimeMillis() < deadline) {
+                    long remaining = deadline - System.currentTimeMillis();
+
+                    Message replyMessage = consumer.receive(remaining);
+                    if (replyMessage == null) {
+                        break;
+                    }
+
+                    String replyJson = readJmsBodyAsString(replyMessage);
+                    System.out.println("[BANK-RA] op=" + operation + " corrId=" + corrId + " raw reply=" + replyJson);
+
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> reply = mapper.readValue(replyJson, Map.class);
+
+                    Object replyCorrId = reply.get("correlationId");
+                    if (!corrId.equals(String.valueOf(replyCorrId))) {
+                        System.out.println("[BANK-RA] skip stale/wrong reply. expected="
+                                + corrId + ", actual=" + replyCorrId);
+                        continue;
+                    }
+
+                    Boolean ok = (Boolean) reply.get("ok");
+                    if (!Boolean.TRUE.equals(ok)) {
+                        Object err = reply.get("error");
+                        throw new BankAdapterException(err == null ? "bank error" : err.toString());
+                    }
+
+                    Object p = reply.get("payload");
+                    return p == null ? null : p.toString();
                 }
 
-                String replyJson = readJmsBodyAsString(replyMessage);
-                System.out.println("[BANK-RA] op=" + operation + " corrId=" + corrId + " raw reply=" + replyJson);
-
-                @SuppressWarnings("unchecked")
-                Map<String, Object> reply = mapper.readValue(replyJson, Map.class);
-                Boolean ok = (Boolean) reply.get("ok");
-                if (!Boolean.TRUE.equals(ok)) {
-                    Object err = reply.get("error");
-                    throw new BankAdapterException(err == null ? "bank error" : err.toString());
-                }
-                Object p = reply.get("payload");
-                return p == null ? null : p.toString();
+                throw new BankAdapterException("Bank reply timeout for op " + operation);
             }
         } catch (BankAdapterException e) {
             throw e;
@@ -223,7 +246,7 @@ public class BankManagedConnection implements ManagedConnection {
                 out.write(buffer, 0, read);
             }
 
-            return out.toString(StandardCharsets.UTF_8);
+            return new String(out.toByteArray(), StandardCharsets.UTF_8);
         }
 
         if (message.isBodyAssignableTo(String.class)) {
