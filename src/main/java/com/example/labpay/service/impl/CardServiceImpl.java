@@ -65,6 +65,10 @@ public class CardServiceImpl implements CardService {
 
                     String bankSessionId = bankClient.initiateBind(digits, request.cvv(), request.expiryDate());
 
+                    if (bankSessionId == null || bankSessionId.isBlank()) {
+                        throw new BusinessException("Bank did not return 3DS session id");
+                    }
+
                     sessionRepository.save(CardBindingSession.builder()
                             .sessionId(bankSessionId)
                             .userId(user.getId())

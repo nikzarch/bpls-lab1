@@ -188,6 +188,7 @@ public class BankManagedConnection implements ManagedConnection {
                 }
 
                 String replyJson = readJmsBodyAsString(replyMessage);
+                System.out.println("[BANK-RA] op=" + operation + " corrId=" + corrId + " raw reply=" + replyJson);
 
                 @SuppressWarnings("unchecked")
                 Map<String, Object> reply = mapper.readValue(replyJson, Map.class);
