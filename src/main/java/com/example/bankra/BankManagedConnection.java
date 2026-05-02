@@ -14,7 +14,12 @@ import jakarta.resource.spi.LocalTransaction;
 import jakarta.resource.spi.ManagedConnection;
 import jakarta.resource.spi.ManagedConnectionMetaData;
 import javax.security.auth.Subject;
+import jakarta.jms.BytesMessage;
+import jakarta.jms.Message;
+import jakarta.jms.TextMessage;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import javax.transaction.xa.XAResource;
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -177,10 +182,12 @@ public class BankManagedConnection implements ManagedConnection {
                         .setJMSReplyTo(responseQueue)
                         .send(requestQueue, cmdJson);
 
-                String replyJson = consumer.receiveBody(String.class, timeoutMs);
-                if (replyJson == null) {
+                Message replyMessage = consumer.receive(timeoutMs);
+                if (replyMessage == null) {
                     throw new BankAdapterException("Bank reply timeout for op " + operation);
                 }
+
+                String replyJson = readJmsBodyAsString(replyMessage);
 
                 @SuppressWarnings("unchecked")
                 Map<String, Object> reply = mapper.readValue(replyJson, Map.class);
@@ -197,5 +204,37 @@ public class BankManagedConnection implements ManagedConnection {
         } catch (Exception e) {
             throw new BankAdapterException("Bank adapter failure: " + e.getMessage());
         }
+    }
+
+    private String readJmsBodyAsString(Message message) throws Exception {
+        if (message instanceof TextMessage textMessage) {
+            return textMessage.getText();
+        }
+
+        if (message instanceof BytesMessage bytesMessage) {
+            bytesMessage.reset();
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buffer = new byte[4096];
+
+            int read;
+            while ((read = bytesMessage.readBytes(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
+
+            return out.toString(StandardCharsets.UTF_8);
+        }
+
+        if (message.isBodyAssignableTo(String.class)) {
+            return message.getBody(String.class);
+        }
+
+        if (message.isBodyAssignableTo(byte[].class)) {
+            return new String(message.getBody(byte[].class), StandardCharsets.UTF_8);
+        }
+
+        throw new BankAdapterException(
+                "Unsupported bank reply JMS message type: " + message.getClass().getName()
+        );
     }
 }
