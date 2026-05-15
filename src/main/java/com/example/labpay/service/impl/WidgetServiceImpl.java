@@ -39,9 +39,6 @@ public class WidgetServiceImpl implements WidgetService {
                 TransactionOptions.defaults("create-widget-transaction"),
                 () -> {
                     XmlAppUser merchant = userService.getByUsername(username);
-                    if (Role.valueOf(merchant.getRole()) != Role.MERCHANT) {
-                        throw new BusinessException("Only merchants can create widgets");
-                    }
 
                     return widgetRepository.save(Widget.builder()
                             .merchantId(merchant.getId())

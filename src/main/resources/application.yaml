@@ -7,8 +7,6 @@ spring:
       ddl-auto: update
     properties:
       hibernate:
-        format_sql: true
-        show_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
         transaction:
           coordinator_class: jta
@@ -61,3 +59,11 @@ app:
     secret: "webhook-hmac-secret-key-change-me"
   security:
     users-xml-path: file:./users.xml
+  bitrix:
+    base-url: ${BITRIX_BASE_URL:}
+    external-order-field: UF_CRM_1778872223
+    source-id: WEB
+    stage-id: NEW
+    currency-id: RUB
+    responsible-user-id: 1
+    timeout-ms: 10000

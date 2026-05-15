@@ -1,0 +1,136 @@
+package com.example.labpay.integration.bitrix.ra;
+
+import jakarta.resource.ResourceException;
+import jakarta.resource.spi.ConnectionEventListener;
+import jakarta.resource.spi.ConnectionRequestInfo;
+import jakarta.resource.spi.LocalTransaction;
+import jakarta.resource.spi.ManagedConnection;
+import jakarta.resource.spi.ManagedConnectionMetaData;
+import lombok.RequiredArgsConstructor;
+
+import javax.security.auth.Subject;
+import javax.transaction.xa.XAResource;
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.List;
+
+@RequiredArgsConstructor
+public class BitrixManagedConnection implements ManagedConnection {
+
+    private final BitrixApiClient apiClient;
+    private final List<ConnectionEventListener> listeners = new ArrayList<>();
+
+    @Override
+    public Object getConnection(Subject subject, ConnectionRequestInfo cxRequestInfo) {
+        return new BitrixConnectionImpl(this, apiClient);
+    }
+
+    @Override
+    public void destroy() {
+        listeners.clear();
+    }
+
+    @Override
+    public void cleanup() {
+    }
+
+    @Override
+    public void associateConnection(Object connection) {
+    }
+
+    @Override
+    public void addConnectionEventListener(ConnectionEventListener listener) {
+        listeners.add(listener);
+    }
+
+    @Override
+    public void removeConnectionEventListener(ConnectionEventListener listener) {
+        listeners.remove(listener);
+    }
+
+    @Override
+    public XAResource getXAResource() throws ResourceException {
+        return null;
+    }
+
+    @Override
+    public LocalTransaction getLocalTransaction() {
+        return null;
+    }
+
+    @Override
+    public ManagedConnectionMetaData getMetaData() {
+        return new ManagedConnectionMetaData() {
+            @Override
+            public String getEISProductName() {
+                return "Bitrix24";
+            }
+
+            @Override
+            public String getEISProductVersion() {
+                return "1.0";
+            }
+
+            @Override
+            public int getMaxConnections() {
+                return 1;
+            }
+
+            @Override
+            public String getUserName() {
+                return "bitrix";
+            }
+        };
+    }
+
+    /**
+     * Sets the log writer for this ManagedConnection instance.
+     *
+     * <p>The log writer is a character output stream to which all logging and
+     * tracing messages for this ManagedConnection instance will be printed.
+     * Application Server manages the association of output stream with the
+     * ManagedConnection instance based on the connection pooling
+     * requirements.</p>
+     *
+     * <p>When a ManagedConnection object is initially created, the default
+     * log writer associated with this instance is obtained from the
+     * ManagedConnectionFactory. An application server can set a log writer
+     * specific to this ManagedConnection to log/trace this instance using
+     * setLogWriter method.</p>
+     *
+     * @param out Character Output stream to be associated
+     * @throws ResourceException                generic exception if operation fails
+     * @throws ResourceAdapterInternalException resource adapter related error condition
+     **/
+    @Override
+    public void setLogWriter(PrintWriter out) throws ResourceException {
+
+    }
+
+    /**
+     * Gets the log writer for this ManagedConnection instance.
+     *
+     * <p>The log writer is a character output stream to which all logging and
+     * tracing messages for this ManagedConnection instance will be printed.
+     * ConnectionManager manages the association of output stream with the
+     * ManagedConnection instance based on the connection pooling
+     * requirements.</p>
+     *
+     * <p>The Log writer associated with a ManagedConnection instance can be
+     * one set as default from the ManagedConnectionFactory (that created
+     * this connection) or one set specifically for this instance by the
+     * application server.</p>
+     *
+     * @return Character ourput stream associated with this Managed-
+     * Connection instance
+     * @throws ResourceException generic exception if operation fails
+     **/
+    @Override
+    public PrintWriter getLogWriter() throws ResourceException {
+        return null;
+    }
+
+    BitrixApiClient apiClient() {
+        return apiClient;
+    }
+}

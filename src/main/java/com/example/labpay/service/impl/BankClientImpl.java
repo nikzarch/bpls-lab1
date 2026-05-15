@@ -1,59 +1,104 @@
 package com.example.labpay.service.impl;
 
-import com.example.bankra.BankConnection;
-import com.example.bankra.BankConnectionFactory;
 import com.example.labpay.exception.BusinessException;
+import com.example.labpay.mq.BankCommandMessage;
+import com.example.labpay.mq.BankReplyMessage;
 import com.example.labpay.service.BankClient;
-import jakarta.resource.ResourceException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.jms.core.JmsTemplate;
 import org.springframework.stereotype.Service;
 
+import java.util.Map;
+import java.util.UUID;
+
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class BankClientImpl implements BankClient {
 
-    private final BankConnectionFactory bankConnectionFactory;
+    private final JmsTemplate jmsTemplate;
+    private final ObjectMapper mapper = new ObjectMapper();
+
+    private static final String REQUEST_QUEUE = "bank.requests";
+    private static final String RESPONSE_QUEUE = "bank.responses";
+
+    private BankReplyMessage call(String op, Object payloadObj) {
+        try {
+            String correlationId = UUID.randomUUID().toString();
+
+            String payload = mapper.writeValueAsString(payloadObj);
+            BankCommandMessage cmd =
+                    new BankCommandMessage(correlationId, op, payload, RESPONSE_QUEUE);
+            String json = mapper.writeValueAsString(cmd);
+            log.info(json);
+            jmsTemplate.convertAndSend(REQUEST_QUEUE, json);
+
+            String raw = (String) jmsTemplate.receiveAndConvert(RESPONSE_QUEUE);
+            log.info(raw);
+            BankReplyMessage reply =
+                    mapper.readValue(raw, BankReplyMessage.class);
+
+            if (!reply.correlationId().equals(correlationId)) {
+                throw new BusinessException("Invalid bank reply");
+            }
+
+            if (!reply.ok()) {
+                throw new BusinessException(reply.error());
+            }
+
+            return reply;
+
+        } catch (Exception e) {
+            log.error("Bank unavaiable",e);
+            throw new BusinessException("Bank unavailable");
+        }
+    }
 
     @Override
     public String initiateBind(String cardNumber, String cvv, String expiry) {
-        try (BankConnection c = open()) {
-            return c.initiateBind(cardNumber, cvv, expiry);
-        }
+        return call("INIT_BIND",
+                Map.of(
+                        "cardNumber", cardNumber,
+                        "cvv", cvv,
+                        "expiry", expiry
+                )).payload();
     }
 
     @Override
     public void confirm3ds(String sessionId, String code) {
-        try (BankConnection c = open()) {
-            c.confirm3ds(sessionId, code);
-        }
+        call("CONFIRM_3DS",
+                Map.of(
+                        "sessionId", sessionId,
+                        "code", code
+                ));
     }
 
     @Override
     public String initiateCharge(String cardNumber, double amount) {
-        try (BankConnection c = open()) {
-            return c.initiateCharge(cardNumber, amount);
-        }
+        return call("INIT_CHARGE",
+                Map.of(
+                        "cardNumber", cardNumber,
+                        "amount", amount
+                )).payload();
     }
 
     @Override
     public void completeCharge(String sessionId, double amount) {
-        try (BankConnection c = open()) {
-            c.completeCharge(sessionId, amount);
-        }
+        call("COMPLETE_CHARGE",
+                Map.of(
+                        "sessionId", sessionId,
+                        "amount", amount
+                ));
     }
 
     @Override
     public void directCharge(String cardNumber, double amount) {
-        try (BankConnection c = open()) {
-            c.directCharge(cardNumber, amount);
-        }
-    }
-
-    private BankConnection open() {
-        try {
-            return bankConnectionFactory.getConnection();
-        } catch (ResourceException e) {
-            throw new BusinessException("Bank adapter unavailable: " + e.getMessage());
-        }
+        call("DIRECT_CHARGE",
+                Map.of(
+                        "cardNumber", cardNumber,
+                        "amount", amount
+                ));
     }
 }

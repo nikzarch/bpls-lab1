@@ -13,15 +13,13 @@ import com.example.labpay.dto.response.PaymentOrderResponse;
 import com.example.labpay.exception.BusinessException;
 import com.example.labpay.exception.NotFoundException;
 import com.example.labpay.mq.EventPublisher;
+import com.example.labpay.mq.events.BitrixDealSyncEvent;
 import com.example.labpay.mq.events.WebhookEvent;
 import com.example.labpay.repository.BankCardRepository;
 import com.example.labpay.repository.PaymentOrderRepository;
 import com.example.labpay.repository.ProductOfferRepository;
 import com.example.labpay.repository.WidgetRepository;
-import com.example.labpay.service.BankClient;
-import com.example.labpay.service.PaymentService;
-import com.example.labpay.service.UserService;
-import com.example.labpay.service.WalletService;
+import com.example.labpay.service.*;
 import com.example.labpay.transaction.TransactionManagerFacade;
 import com.example.labpay.transaction.TransactionOptions;
 import com.example.labpay.util.CardTokenizer;
@@ -34,6 +32,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 @Service
@@ -50,6 +49,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final CardTokenizer cardTokenizer;
     private final TransactionManagerFacade transactionManagerFacade;
     private final EventPublisher eventPublisher;
+    private final BitrixCrmService bitrixCrmService;
 
     @Override
     public PaymentOrderResponse createOrder(String username, CreatePaymentRequest request) {
@@ -86,6 +86,8 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     public PaymentOrderResponse processPayment(String username, ProcessPaymentRequest request) {
+        AtomicReference<WebhookEvent> webhookRef = new AtomicReference<>();
+        AtomicReference<BitrixDealSyncEvent> bitrixRef = new AtomicReference<>();
         PaymentOrder order = transactionManagerFacade.execute(
                 TransactionOptions.defaults("process-payment-transaction"),
                 () -> {
@@ -144,7 +146,7 @@ public class PaymentServiceImpl implements PaymentService {
                     currentOrder.setPaidAt(Instant.now());
                     PaymentOrder saved = orderRepository.save(currentOrder);
 
-                    eventPublisher.publishWebhook(new WebhookEvent(
+                    webhookRef.set(new WebhookEvent(
                             saved.getExternalOrderId(),
                             widget.getCallbackUrl(),
                             saved.getStatus().name(),
@@ -152,9 +154,24 @@ public class PaymentServiceImpl implements PaymentService {
                             0
                     ));
 
+                    bitrixRef.set(new BitrixDealSyncEvent(
+                            saved.getId(),
+                            saved.getExternalOrderId(),
+                            username,
+                            widget.getId(),
+                            widget.getMerchantId(),
+                            saved.getProduct().getTitle(),
+                            saved.getAmount(),
+                            saved.getStatus().name(),
+                            saved.getPaidAt()
+                    ));
+
                     return saved;
                 },
-                committedOrder -> log.info("Payment {} committed and webhook enqueued", committedOrder.getId()),
+                committedOrder -> {
+                    log.info("Payment {} committed and async events enqueued", committedOrder.getId());
+                    bitrixCrmService.syncPaidOrder(bitrixRef.get());
+                },
                 ex -> log.error("Process payment rolled back for user {}: {}", username, ex.getMessage())
         );
 

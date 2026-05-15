@@ -11,16 +11,24 @@ services:
       - "5433:5432"
 
   rabbitmq:
-    image: rabbitmq:3-management
+    image: rabbitmq:3.13-management
     container_name: rabbitmq
     hostname: rabbitmq
-    command: bash -c "rabbitmq-plugins enable --offline rabbitmq_amqp1_0 && rabbitmq-server"
-    ports:
-      - "5672:5672"
-      - "15672:15672"
+
+    command: >
+      bash -c "
+        rabbitmq-plugins enable --offline rabbitmq_management rabbitmq_amqp1_0 &&
+        rabbitmq-server
+      "
+
     environment:
       RABBITMQ_DEFAULT_USER: admin
       RABBITMQ_DEFAULT_PASS: admin
+
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
 

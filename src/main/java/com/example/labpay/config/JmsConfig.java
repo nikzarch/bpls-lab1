@@ -11,6 +11,7 @@ import org.springframework.jms.core.JmsTemplate;
 import org.springframework.jms.support.converter.MappingJackson2MessageConverter;
 import org.springframework.jms.support.converter.MessageConverter;
 import org.springframework.jms.support.converter.MessageType;
+import org.springframework.jms.support.converter.SimpleMessageConverter;
 
 @Configuration
 @EnableJms
@@ -32,10 +33,7 @@ public class JmsConfig {
 
     @Bean
     public MessageConverter jacksonJmsMessageConverter() {
-        MappingJackson2MessageConverter c = new MappingJackson2MessageConverter();
-        c.setTargetType(MessageType.TEXT);
-        c.setTypeIdPropertyName("_type");
-        return c;
+        return new SimpleMessageConverter();
     }
 
     @Bean

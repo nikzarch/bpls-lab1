@@ -1,0 +1,13 @@
+package com.example.labpay.integration.bitrix.ra;
+
+import jakarta.resource.ResourceException;
+
+public interface BitrixConnection extends AutoCloseable {
+
+    long upsertDeal(BitrixDealData data) throws ResourceException;
+
+    void addTimelineComment(long dealId, String comment) throws ResourceException;
+
+    @Override
+    void close() throws ResourceException;
+}
