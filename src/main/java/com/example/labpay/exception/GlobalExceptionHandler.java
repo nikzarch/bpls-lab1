@@ -36,7 +36,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleBankUnavailable(BankUnavailableException ex) {
         log.warn("Bank unavailable: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(new ErrorResponse("Bank service is unavailable, please retry later"));
+                .body(new ErrorResponse("Bank is down, please retry later"));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

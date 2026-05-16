@@ -97,18 +97,9 @@ public class WalletServiceImpl implements WalletService {
         try {
             BankChargeResult prepared = bankClient.prepareCharge(correlationId, cardNumber, amount.doubleValue());
             log.info("Bank prepared corr={} status={}", correlationId, prepared.status());
-        } catch (BankTimeoutException e) {
-            markPendingReconcile(correlationId, "PREPARE timeout: " + e.getMessage());
-            return new TopUpResultResponse(
-                    "PENDING",
-                    correlationId,
-                    null,
-                    null,
-                    "Top-up is being reconciled with the bank. Check status later."
-            );
-        } catch (BankUnavailableException e) {
+        } catch (BankTimeoutException | BankUnavailableException e) {
             markFailed(correlationId, "Bank unavailable: " + e.getMessage());
-            throw e;
+            throw new BankUnavailableException("Bank is down, please retry later", e);
         } catch (BusinessException e) {
             markFailed(correlationId, e.getMessage());
             throw e;

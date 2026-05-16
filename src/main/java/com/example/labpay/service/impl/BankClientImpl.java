@@ -16,6 +16,9 @@ import org.springframework.jms.JmsException;
 import org.springframework.jms.core.JmsTemplate;
 import org.springframework.jms.core.MessageCreator;
 import org.springframework.stereotype.Service;
+import jakarta.jms.DeliveryMode;
+import jakarta.jms.MessageProducer;
+import jakarta.jms.Queue;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -51,35 +54,48 @@ public class BankClientImpl implements BankClient {
             BankCommandMessage cmd = new BankCommandMessage(correlationId, op, payload, replyQueue);
             String json = mapper.writeValueAsString(cmd);
 
-            MessageCreator creator = (session) -> {
-                TextMessage m = session.createTextMessage(json);
-                m.setJMSCorrelationID(correlationId);
-                return m;
-            };
-
             try {
-                jmsTemplate.send(requestQueue, creator);
+                /*
+                 * Important:
+                 * If bank is down, RabbitMQ must not keep this request forever.
+                 * Otherwise old PREPARE_CHARGE messages are processed when bank starts again.
+                 */
+                jmsTemplate.execute(session -> {
+                    Queue destination = session.createQueue(requestQueue);
+
+                    try (MessageProducer producer = session.createProducer(destination)) {
+                        TextMessage m = session.createTextMessage(json);
+                        m.setJMSCorrelationID(correlationId);
+
+                        producer.setDeliveryMode(DeliveryMode.NON_PERSISTENT);
+                        producer.setTimeToLive(receiveTimeoutMs);
+                        producer.send(m);
+                    }
+
+                    return null;
+                }, true);
             } catch (JmsException ex) {
                 log.warn("Bank send failed [{} corr={}]: {}", op, correlationId, ex.getMessage());
-                throw new BankUnavailableException("Bank send failed", ex);
+                throw new BankUnavailableException("Bank is down: request could not be sent", ex);
             }
 
             String selector = "JMSCorrelationID = '" + correlationId + "'";
             long previous = jmsTemplate.getReceiveTimeout();
             jmsTemplate.setReceiveTimeout(receiveTimeoutMs);
+
             Message reply;
             try {
                 reply = jmsTemplate.receiveSelected(replyQueue, selector);
             } catch (JmsException ex) {
                 log.warn("Bank receive failed [{} corr={}]: {}", op, correlationId, ex.getMessage());
-                throw new BankUnavailableException("Bank receive failed", ex);
+                throw new BankUnavailableException("Bank is down: reply could not be received", ex);
             } finally {
                 jmsTemplate.setReceiveTimeout(previous);
             }
 
             if (reply == null) {
-                log.warn("Bank reply timeout [{} corr={}]", op, correlationId);
-                throw new BankTimeoutException(correlationId, "Bank did not reply within " + receiveTimeoutMs + "ms");
+                log.warn("Bank did not reply [{} corr={}] within {}ms", op, correlationId, receiveTimeoutMs);
+                throw new BankUnavailableException("Bank is down: no response within " + receiveTimeoutMs + "ms");
             }
 
             String raw;
@@ -90,12 +106,22 @@ public class BankClientImpl implements BankClient {
             }
 
             BankReplyMessage parsed = mapper.readValue(raw, BankReplyMessage.class);
+
             if (parsed.correlationId() != null && !parsed.correlationId().equals(correlationId)) {
-                throw new BusinessException("Bank correlation mismatch");
+                log.warn(
+                        "Bank correlation mismatch: expected={}, actual={}, op={}, raw={}",
+                        correlationId,
+                        parsed.correlationId(),
+                        op,
+                        raw
+                );
+
+                throw new BankUnavailableException("Bank returned mismatched correlation id");
             }
+
             return parsed;
 
-        } catch (BankUnavailableException | BankTimeoutException | BusinessException e) {
+        } catch (BankUnavailableException | BusinessException e) {
             throw e;
         } catch (Exception e) {
             log.error("Bank call unexpected failure [{} corr={}]", op, correlationId, e);
