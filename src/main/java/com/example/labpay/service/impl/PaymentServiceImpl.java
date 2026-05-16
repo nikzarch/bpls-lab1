@@ -58,6 +58,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final TransactionManagerFacade transactionManagerFacade;
     private final EventPublisher eventPublisher;
     private final BitrixCrmService bitrixCrmService;
+    private final PaymentSideEffectService paymentSideEffectService;
 
     @Override
     public PaymentOrderResponse createOrder(String username, CreatePaymentRequest request) {
@@ -156,10 +157,7 @@ public class PaymentServiceImpl implements PaymentService {
                 ex -> log.error("Wallet payment failed for user {}: {}", buyer.getUsername(), ex.getMessage())
         );
 
-        if (bitrixRef.get() != null) {
-            try { bitrixCrmService.syncPaidOrder(bitrixRef.get()); } catch (Exception e) { log.warn("Bitrix sync failed: {}", e.getMessage()); }
-        }
-        if (webhookRef.get() != null) eventPublisher.publishWebhook(webhookRef.get());
+        paymentSideEffectService.afterPaidOrder(bitrixRef.get(), webhookRef.get());
 
         return toResponse(result);
     }
@@ -271,10 +269,7 @@ public class PaymentServiceImpl implements PaymentService {
                 ex -> log.error("Card payment settle rolled back for user {}: {}", buyer.getUsername(), ex.getMessage())
         );
 
-        if (bitrixRef.get() != null) {
-            try { bitrixCrmService.syncPaidOrder(bitrixRef.get()); } catch (Exception e) { log.warn("Bitrix sync failed: {}", e.getMessage()); }
-        }
-        if (webhookRef.get() != null) eventPublisher.publishWebhook(webhookRef.get());
+        paymentSideEffectService.afterPaidOrder(bitrixRef.get(), webhookRef.get());
 
         return toResponse(finalized);
     }

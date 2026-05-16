@@ -40,7 +40,11 @@ public class JmsConfig {
     public JmsTemplate jmsTemplate(ConnectionFactory cf, MessageConverter mc) {
         JmsTemplate t = new JmsTemplate(cf);
         t.setMessageConverter(mc);
-        t.setReceiveTimeout(10_000);
+        t.setReceiveTimeout(5_000);
+        t.setExplicitQosEnabled(true);
+        t.setDeliveryPersistent(false);
+        t.setTimeToLive(30_000);
+
         return t;
     }
 
