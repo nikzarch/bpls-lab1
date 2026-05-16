@@ -1,5 +1,6 @@
-package com.example.labpay.integration.bitrix.ra;
+package com.example.labpay.integration.bitrix.ra.interfaces;
 
+import com.example.labpay.integration.bitrix.ra.dto.BitrixDealData;
 import jakarta.resource.ResourceException;
 
 public interface BitrixConnection extends AutoCloseable {

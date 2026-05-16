@@ -1,4 +1,4 @@
-package com.example.labpay.integration.bitrix.ra;
+package com.example.labpay.integration.bitrix.ra.interfaces;
 
 import jakarta.resource.ResourceException;
 

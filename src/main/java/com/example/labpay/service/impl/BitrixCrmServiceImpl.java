@@ -1,15 +1,14 @@
 package com.example.labpay.service.impl;
 
 import com.example.labpay.exception.BusinessException;
-import com.example.labpay.integration.bitrix.ra.BitrixConnection;
-import com.example.labpay.integration.bitrix.ra.BitrixConnectionFactory;
-import com.example.labpay.integration.bitrix.ra.BitrixDealData;
+import com.example.labpay.integration.bitrix.ra.interfaces.BitrixConnection;
+import com.example.labpay.integration.bitrix.ra.interfaces.BitrixConnectionFactory;
+import com.example.labpay.integration.bitrix.ra.dto.BitrixDealData;
 import com.example.labpay.mq.events.BitrixDealSyncEvent;
 import com.example.labpay.service.BitrixCrmService;
 import jakarta.resource.ResourceException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 @Slf4j

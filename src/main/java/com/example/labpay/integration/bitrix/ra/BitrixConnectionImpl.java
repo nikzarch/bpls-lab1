@@ -1,5 +1,7 @@
 package com.example.labpay.integration.bitrix.ra;
 
+import com.example.labpay.integration.bitrix.ra.dto.BitrixDealData;
+import com.example.labpay.integration.bitrix.ra.interfaces.BitrixConnection;
 import jakarta.resource.ResourceException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

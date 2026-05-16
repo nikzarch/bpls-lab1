@@ -1,6 +1,6 @@
 package com.example.labpay.integration.bitrix.config;
 
-import com.example.labpay.integration.bitrix.ra.BitrixConnectionFactory;
+import com.example.labpay.integration.bitrix.ra.interfaces.BitrixConnectionFactory;
 import com.example.labpay.integration.bitrix.ra.BitrixConnectionFactoryImpl;
 import com.example.labpay.integration.bitrix.ra.BitrixManagedConnectionFactory;
 import com.example.labpay.integration.bitrix.ra.BitrixSimpleConnectionManager;

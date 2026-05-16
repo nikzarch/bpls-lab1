@@ -83,51 +83,13 @@ public class BitrixManagedConnection implements ManagedConnection {
         };
     }
 
-    /**
-     * Sets the log writer for this ManagedConnection instance.
-     *
-     * <p>The log writer is a character output stream to which all logging and
-     * tracing messages for this ManagedConnection instance will be printed.
-     * Application Server manages the association of output stream with the
-     * ManagedConnection instance based on the connection pooling
-     * requirements.</p>
-     *
-     * <p>When a ManagedConnection object is initially created, the default
-     * log writer associated with this instance is obtained from the
-     * ManagedConnectionFactory. An application server can set a log writer
-     * specific to this ManagedConnection to log/trace this instance using
-     * setLogWriter method.</p>
-     *
-     * @param out Character Output stream to be associated
-     * @throws ResourceException                generic exception if operation fails
-     * @throws ResourceAdapterInternalException resource adapter related error condition
-     **/
     @Override
     public void setLogWriter(PrintWriter out) throws ResourceException {
-
+        this.setLogWriter(out);
     }
-
-    /**
-     * Gets the log writer for this ManagedConnection instance.
-     *
-     * <p>The log writer is a character output stream to which all logging and
-     * tracing messages for this ManagedConnection instance will be printed.
-     * ConnectionManager manages the association of output stream with the
-     * ManagedConnection instance based on the connection pooling
-     * requirements.</p>
-     *
-     * <p>The Log writer associated with a ManagedConnection instance can be
-     * one set as default from the ManagedConnectionFactory (that created
-     * this connection) or one set specifically for this instance by the
-     * application server.</p>
-     *
-     * @return Character ourput stream associated with this Managed-
-     * Connection instance
-     * @throws ResourceException generic exception if operation fails
-     **/
     @Override
     public PrintWriter getLogWriter() throws ResourceException {
-        return null;
+        return new PrintWriter(System.out);
     }
 
     BitrixApiClient apiClient() {

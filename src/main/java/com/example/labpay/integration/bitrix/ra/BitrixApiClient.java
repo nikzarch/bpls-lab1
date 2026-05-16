@@ -1,5 +1,7 @@
 package com.example.labpay.integration.bitrix.ra;
 
+import com.example.labpay.integration.bitrix.ra.dto.BitrixDealData;
+import com.example.labpay.integration.bitrix.ra.exception.BitrixApiException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;

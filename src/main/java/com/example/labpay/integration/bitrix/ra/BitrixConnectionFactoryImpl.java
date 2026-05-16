@@ -1,5 +1,8 @@
 package com.example.labpay.integration.bitrix.ra;
 
+import com.example.labpay.integration.bitrix.ra.dto.BitrixConnectionRequestInfo;
+import com.example.labpay.integration.bitrix.ra.interfaces.BitrixConnection;
+import com.example.labpay.integration.bitrix.ra.interfaces.BitrixConnectionFactory;
 import jakarta.resource.ResourceException;
 import jakarta.resource.spi.ConnectionManager;
 

@@ -1,4 +1,4 @@
-package com.example.labpay.integration.bitrix.ra;
+package com.example.labpay.integration.bitrix.ra.dto;
 
 import java.math.BigDecimal;
 import java.time.Instant;
