@@ -16,16 +16,31 @@ public class BitrixConnectionImpl implements BitrixConnection {
     private final BitrixApiClient apiClient;
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
-
     @Override
     public long upsertDeal(BitrixDealData data) throws ResourceException {
         ensureOpen();
-        return apiClient.findDealIdByExternalOrderId(data.externalOrderId())
+
+        long dealId = apiClient.findDealIdByExternalOrderId(data.externalOrderId())
                 .map(existingId -> {
                     apiClient.updateDeal(existingId, data);
                     return existingId;
                 })
                 .orElseGet(() -> apiClient.createDeal(data));
+
+        /*
+         * "Товары" in Bitrix deal.
+         * This is idempotent: crm.deal.productrows.set replaces rows for the deal,
+         * so repeated syncs do not duplicate goods.
+         */
+        apiClient.setDealProductRows(dealId, data);
+
+        return dealId;
+    }
+
+    @Override
+    public void setDealProductRows(long dealId, BitrixDealData data) throws ResourceException {
+        ensureOpen();
+        apiClient.setDealProductRows(dealId, data);
     }
 
     @Override

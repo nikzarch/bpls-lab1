@@ -67,6 +67,19 @@ public class BitrixApiClient {
         invoke("crm.timeline.comment.add", form);
     }
 
+    public void setDealProductRows(long dealId, BitrixDealData data) {
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+
+        form.add("id", String.valueOf(dealId));
+
+        form.add("rows[0][PRODUCT_NAME]", data.productTitle());
+        form.add("rows[0][PRICE]", data.amount().toPlainString());
+        form.add("rows[0][QUANTITY]", "1");
+        form.add("rows[0][CURRENCY_ID]", currencyId);
+
+        invoke("crm.deal.productrows.set", form);
+    }
+
     private MultiValueMap<String, String> buildDealFields(BitrixDealData data) {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
 

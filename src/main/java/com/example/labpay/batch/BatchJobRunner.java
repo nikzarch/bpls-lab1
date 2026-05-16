@@ -39,10 +39,10 @@ public class BatchJobRunner {
         }
 
         JobParameters params = new JobParametersBuilder()
-            .addLong("run.id", System.currentTimeMillis())
-            .addString("trigger", trigger)
-            .addString("now", Instant.now().toString())
-            .toJobParameters();
+                .addLong("run.id", System.currentTimeMillis())
+                .addString("trigger", trigger)
+                .addString("now", Instant.now().toString())
+                .toJobParameters();
 
         log.info("Launching batch job {} trigger={}", job.getName(), trigger);
         return jobLauncher.run(job, params);
