@@ -27,11 +27,6 @@ public class BitrixConnectionImpl implements BitrixConnection {
                 })
                 .orElseGet(() -> apiClient.createDeal(data));
 
-        /*
-         * "Товары" in Bitrix deal.
-         * This is idempotent: crm.deal.productrows.set replaces rows for the deal,
-         * so repeated syncs do not duplicate goods.
-         */
         apiClient.setDealProductRows(dealId, data);
 
         return dealId;

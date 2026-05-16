@@ -36,14 +36,6 @@ public class CardSessionCleanupJobConfig {
     @Value("${app.batch.chunk-size:200}")
     private int chunkSize;
 
-    /**
-     * Do NOT use JpaPagingItemReader here.
-     *
-     * This job deletes rows that are part of the reader query. Offset-based paging can skip rows:
-     * page 0 is read, rows are deleted, then page 1 starts after an offset in the now-smaller result set.
-     *
-     * This reader always loads the first N expired rows after each committed chunk.
-     */
     @Bean
     @StepScope
     public ItemReader<CardBindingSession> cardSessionReader(
@@ -71,10 +63,6 @@ public class CardSessionCleanupJobConfig {
 
                     buffer.addAll(page);
 
-                    /*
-                     * If fewer than chunkSize rows were fetched, this is the last page for this job run.
-                     * After this buffer is drained, return null so Spring Batch writes the final partial chunk.
-                     */
                     if (page.size() < chunkSize) {
                         exhausted = true;
                     }
