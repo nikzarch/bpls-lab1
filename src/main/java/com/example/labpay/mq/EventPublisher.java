@@ -18,10 +18,18 @@ public class EventPublisher {
     private final JmsTemplate jmsTemplate;
 
     public void publishWebhook(WebhookEvent e) {
-        jmsTemplate.convertAndSend(QUEUE_WEBHOOKS, e);
+        safePublish(QUEUE_WEBHOOKS, e);
     }
 
     public void publishNotification(NotificationEvent e) {
-        jmsTemplate.convertAndSend(QUEUE_NOTIFICATIONS, e);
+        safePublish(QUEUE_NOTIFICATIONS, e);
+    }
+
+    private void safePublish(String queue, Object event) {
+        try {
+            jmsTemplate.convertAndSend(queue, event);
+        } catch (RuntimeException ex) {
+            log.warn("Failed to publish event to {}: {}", queue, ex.getMessage(), ex);
+        }
     }
 }

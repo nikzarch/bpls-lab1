@@ -1,5 +1,7 @@
 package com.example.labpay.config;
 
+import com.example.labpay.mq.events.NotificationEvent;
+import com.example.labpay.mq.events.WebhookEvent;
 import jakarta.jms.ConnectionFactory;
 import org.apache.qpid.jms.JmsConnectionFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,13 +13,15 @@ import org.springframework.jms.core.JmsTemplate;
 import org.springframework.jms.support.converter.MappingJackson2MessageConverter;
 import org.springframework.jms.support.converter.MessageConverter;
 import org.springframework.jms.support.converter.MessageType;
-import org.springframework.jms.support.converter.SimpleMessageConverter;
+
+import java.util.HashMap;
+import java.util.Map;
 
 @Configuration
 @EnableJms
 public class JmsConfig {
 
-    @Value("${app.jms.url:amqp://localhost:5672}")
+    @Value("${app.jms.url:${APP_JMS_URL:amqp://localhost:5672}}")
     private String url;
 
     @Value("${app.jms.username:admin}")
@@ -33,7 +37,17 @@ public class JmsConfig {
 
     @Bean
     public MessageConverter jacksonJmsMessageConverter() {
-        return new SimpleMessageConverter();
+        MappingJackson2MessageConverter converter = new MappingJackson2MessageConverter();
+
+        converter.setTargetType(MessageType.TEXT);
+        converter.setTypeIdPropertyName("_type");
+
+        Map<String, Class<?>> typeIdMappings = new HashMap<>();
+        typeIdMappings.put("notification", NotificationEvent.class);
+        typeIdMappings.put("webhook", WebhookEvent.class);
+        converter.setTypeIdMappings(typeIdMappings);
+
+        return converter;
     }
 
     @Bean
@@ -50,7 +64,9 @@ public class JmsConfig {
 
     @Bean
     public DefaultJmsListenerContainerFactory jmsListenerContainerFactory(
-            ConnectionFactory cf, MessageConverter mc) {
+            ConnectionFactory cf,
+            MessageConverter mc
+    ) {
         DefaultJmsListenerContainerFactory f = new DefaultJmsListenerContainerFactory();
         f.setConnectionFactory(cf);
         f.setMessageConverter(mc);
