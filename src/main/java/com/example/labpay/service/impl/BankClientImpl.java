@@ -19,6 +19,11 @@ import org.springframework.stereotype.Service;
 import jakarta.jms.DeliveryMode;
 import jakarta.jms.MessageProducer;
 import jakarta.jms.Queue;
+import com.example.labpay.exception.BankQueueUnavailableException;
+import com.example.labpay.service.BankQueueAvailabilityChecker;
+import jakarta.jms.DeliveryMode;
+import jakarta.jms.MessageProducer;
+import jakarta.jms.Queue;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -35,14 +40,17 @@ public class BankClientImpl implements BankClient {
     private final String requestQueue;
     private final String replyQueue;
     private final long receiveTimeoutMs;
+    private final BankQueueAvailabilityChecker queueChecker;
 
     public BankClientImpl(
-            JmsTemplate jmsTemplate,
-            @Value("${app.bank.request-queue:bank.requests}") String requestQueue,
-            @Value("${app.bank.reply-queue:bank.responses}") String replyQueue,
-            @Value("${app.bank.receive-timeout-ms:5000}") long receiveTimeoutMs
+        JmsTemplate jmsTemplate,
+        BankQueueAvailabilityChecker queueChecker,
+        @Value("${app.bank.request-queue:bank.requests}") String requestQueue,
+        @Value("${app.bank.reply-queue:bank.responses}") String replyQueue,
+        @Value("${app.bank.receive-timeout-ms:5000}") long receiveTimeoutMs
     ) {
         this.jmsTemplate = jmsTemplate;
+        this.queueChecker = queueChecker;
         this.requestQueue = requestQueue;
         this.replyQueue = replyQueue;
         this.receiveTimeoutMs = receiveTimeoutMs;
@@ -50,16 +58,13 @@ public class BankClientImpl implements BankClient {
 
     private BankReplyMessage call(String op, String correlationId, Object payloadObj) {
         try {
+            queueChecker.assertQueueReachable();
+
             String payload = mapper.writeValueAsString(payloadObj);
             BankCommandMessage cmd = new BankCommandMessage(correlationId, op, payload, replyQueue);
             String json = mapper.writeValueAsString(cmd);
 
             try {
-                /*
-                 * Important:
-                 * If bank is down, RabbitMQ must not keep this request forever.
-                 * Otherwise old PREPARE_CHARGE messages are processed when bank starts again.
-                 */
                 jmsTemplate.execute(session -> {
                     Queue destination = session.createQueue(requestQueue);
 
@@ -74,9 +79,11 @@ public class BankClientImpl implements BankClient {
 
                     return null;
                 }, true);
+            } catch (BankQueueUnavailableException e) {
+                throw e;
             } catch (JmsException ex) {
-                log.warn("Bank send failed [{} corr={}]: {}", op, correlationId, ex.getMessage());
-                throw new BankUnavailableException("Bank is down: request could not be sent", ex);
+                log.warn("Bank queue send failed [{} corr={}]: {}", op, correlationId, ex.getMessage());
+                throw new BankQueueUnavailableException("Bank queue is unavailable, please retry later", ex);
             }
 
             String selector = "JMSCorrelationID = '" + correlationId + "'";
@@ -95,7 +102,7 @@ public class BankClientImpl implements BankClient {
 
             if (reply == null) {
                 log.warn("Bank did not reply [{} corr={}] within {}ms", op, correlationId, receiveTimeoutMs);
-                throw new BankUnavailableException("Bank is down: no response within " + receiveTimeoutMs + "ms");
+                throw new BankUnavailableException("Bank is down, please retry later");
             }
 
             String raw;

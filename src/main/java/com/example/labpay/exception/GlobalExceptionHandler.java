@@ -32,6 +32,13 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse(ex.getMessage()));
     }
 
+    @ExceptionHandler(BankQueueUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleBankQueueUnavailable(BankQueueUnavailableException ex) {
+        log.warn("Bank queue unavailable: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ErrorResponse("Bank queue is unavailable, please retry later"));
+    }
+
     @ExceptionHandler(BankUnavailableException.class)
     public ResponseEntity<ErrorResponse> handleBankUnavailable(BankUnavailableException ex) {
         log.warn("Bank unavailable: {}", ex.getMessage());
