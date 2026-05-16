@@ -16,7 +16,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
-import javax.security.auth.login.CredentialNotFoundException;
 import java.util.stream.Collectors;
 
 @RestControllerAdvice
@@ -31,6 +30,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ErrorResponse> handleNotFound(NotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse(ex.getMessage()));
+    }
+
+    @ExceptionHandler(BankUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleBankUnavailable(BankUnavailableException ex) {
+        log.warn("Bank unavailable: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ErrorResponse("Bank service is unavailable, please retry later"));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -71,16 +77,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotWritableException.class)
     public void handleNotWritable(HttpMessageNotWritableException ex) {
     }
+
     @ExceptionHandler(AuthenticationCredentialsNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleCredentialsNotFound(Exception ex){
+    public ResponseEntity<ErrorResponse> handleCredentialsNotFound(Exception ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse(ex.getMessage()));
     }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGeneral(Exception ex, HttpServletResponse response) {
         if (response.isCommitted()) {
             return null;
         }
-        log.error(ex.getMessage());
+        log.error(ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(new ErrorResponse("Internal server error"));
     }

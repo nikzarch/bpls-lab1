@@ -33,4 +33,7 @@ public class ProductOffer {
 
     @Column(nullable = false)
     private String description;
+
+    @Column
+    private Long bitrixProductId;
 }

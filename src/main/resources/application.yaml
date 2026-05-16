@@ -33,7 +33,11 @@ spring:
         databaseName: postgres
         user: postgres
         password: 1
-
+  batch:
+    job:
+      enabled: false
+    jdbc:
+      initialize-schema: always
 
 springdoc:
   api-docs:
@@ -47,7 +51,10 @@ rabbit:
 
 app:
   bank:
-    timeout-ms: 5000
+    request-queue: bank.requests
+    reply-queue: bank.responses
+    receive-timeout-ms: 5000
+    connect-timeout-ms: 2000
   jms:
     url: amqp://localhost:5672
   jwt:
@@ -67,3 +74,15 @@ app:
     currency-id: RUB
     responsible-user-id: 1
     timeout-ms: 10000
+  batch:
+    chunk-size: 200
+    bank-reconciliation:
+      cron: "0 */1 * * * *"
+      max-attempts: 30
+    card-session-cleanup:
+      cron: "0 */5 * * * *"
+    hold-expiration:
+      cron: "0 */1 * * * *"
+    stuck-transfer:
+      cron: "0 */10 * * * *"
+      cutoff-minutes: 30

@@ -29,10 +29,11 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'org.springframework.boot:spring-boot-starter-batch'
 	implementation 'org.springframework:spring-jms'
 	implementation 'org.apache.qpid:qpid-jms-client:2.10.0'
-    implementation 'jakarta.resource:jakarta.resource-api:2.1.0'
-    implementation 'jakarta.transaction:jakarta.transaction-api:2.0.1'
+	implementation 'jakarta.resource:jakarta.resource-api:2.1.0'
+	implementation 'jakarta.transaction:jakarta.transaction-api:2.0.1'
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
 	implementation 'com.atomikos:transactions-spring-boot3-starter:6.0.0'
 

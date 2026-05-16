@@ -1,24 +1,24 @@
 package com.example.labpay.service.impl;
 
+import com.example.labpay.domain.BankOperation;
+import com.example.labpay.domain.BankOperationStatus;
+import com.example.labpay.domain.BankOperationType;
 import com.example.labpay.domain.card.BankCard;
 import com.example.labpay.domain.card.CardStatus;
-import com.example.labpay.domain.wallet.HoldStatus;
-import com.example.labpay.domain.wallet.TransactionType;
-import com.example.labpay.domain.wallet.Wallet;
-import com.example.labpay.domain.wallet.WalletHold;
-import com.example.labpay.domain.wallet.WalletTransaction;
+import com.example.labpay.domain.wallet.*;
 import com.example.labpay.dto.request.TopUpRequest;
+import com.example.labpay.dto.response.TopUpResultResponse;
 import com.example.labpay.dto.response.TransactionResponse;
 import com.example.labpay.dto.response.WalletResponse;
+import com.example.labpay.exception.BankTimeoutException;
+import com.example.labpay.exception.BankUnavailableException;
 import com.example.labpay.exception.BusinessException;
 import com.example.labpay.exception.NotFoundException;
-import com.example.labpay.repository.BankCardRepository;
-import com.example.labpay.repository.WalletHoldRepository;
-import com.example.labpay.repository.WalletRepository;
-import com.example.labpay.repository.WalletTransactionRepository;
+import com.example.labpay.repository.*;
 import com.example.labpay.service.BankClient;
 import com.example.labpay.service.UserService;
 import com.example.labpay.service.WalletService;
+import com.example.labpay.service.dto.BankChargeResult;
 import com.example.labpay.transaction.TransactionManagerFacade;
 import com.example.labpay.transaction.TransactionOptions;
 import com.example.labpay.util.CardTokenizer;
@@ -46,6 +46,7 @@ public class WalletServiceImpl implements WalletService {
     private final WalletTransactionRepository transactionRepository;
     private final WalletHoldRepository walletHoldRepository;
     private final BankCardRepository bankCardRepository;
+    private final BankOperationRepository bankOperationRepository;
     private final UserService userService;
     private final BankClient bankClient;
     private final CardTokenizer cardTokenizer;
@@ -59,39 +60,167 @@ public class WalletServiceImpl implements WalletService {
     }
 
     @Override
-    public WalletResponse topUp(String username, TopUpRequest request) {
+    public TopUpResultResponse topUp(String username, TopUpRequest request) {
+        XmlAppUser user = userService.getByUsername(username);
+        BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);
+
+        BankCard card = bankCardRepository.findByToken(request.cardToken())
+                .filter(c -> c.getUserId().equals(user.getId()))
+                .orElseThrow(() -> new NotFoundException("Card not found"));
+
+        if (card.getStatus() != CardStatus.ACTIVE) {
+            throw new BusinessException("Card is not active");
+        }
+
+        String correlationId = UUID.randomUUID().toString();
+
+        transactionManagerFacade.execute(
+                TransactionOptions.defaults("topup-prepare-record"),
+                () -> bankOperationRepository.save(BankOperation.builder()
+                        .correlationId(correlationId)
+                        .type(BankOperationType.WALLET_TOPUP)
+                        .status(BankOperationStatus.PREPARING)
+                        .userId(user.getId())
+                        .cardToken(card.getToken())
+                        .maskedCard(card.getMaskedCardNumber())
+                        .amount(amount)
+                        .createdAt(Instant.now())
+                        .updatedAt(Instant.now())
+                        .attempts(0)
+                        .build()),
+                null,
+                ex -> log.error("Failed to record bank op [{}]: {}", correlationId, ex.getMessage())
+        );
+
+        String cardNumber = cardTokenizer.decrypt(card.getEncryptedCardNumber());
+
+        try {
+            BankChargeResult prepared = bankClient.prepareCharge(correlationId, cardNumber, amount.doubleValue());
+            log.info("Bank prepared corr={} status={}", correlationId, prepared.status());
+        } catch (BankTimeoutException e) {
+            markPendingReconcile(correlationId, "PREPARE timeout: " + e.getMessage());
+            return new TopUpResultResponse(
+                    "PENDING",
+                    correlationId,
+                    null,
+                    null,
+                    "Top-up is being reconciled with the bank. Check status later."
+            );
+        } catch (BankUnavailableException e) {
+            markFailed(correlationId, "Bank unavailable: " + e.getMessage());
+            throw e;
+        } catch (BusinessException e) {
+            markFailed(correlationId, e.getMessage());
+            throw e;
+        }
+
         Wallet wallet = transactionManagerFacade.execute(
-                TransactionOptions.defaults("wallet-topup-transaction"),
+                TransactionOptions.defaults("topup-commit-db"),
                 () -> {
-                    XmlAppUser user = userService.getByUsername(username);
-                    BigDecimal amount = request.amount().setScale(2, RoundingMode.HALF_UP);
-
-                    BankCard card = bankCardRepository.findByToken(request.cardToken())
-                            .filter(c -> c.getUserId().equals(user.getId()))
-                            .orElseThrow(() -> new NotFoundException("Card not found"));
-
-                    if (card.getStatus() != CardStatus.ACTIVE) {
-                        throw new BusinessException("Card is not active");
-                    }
-
-                    String cardNumber = cardTokenizer.decrypt(card.getEncryptedCardNumber());
-                    bankClient.directCharge(cardNumber, amount.doubleValue());
+                    BankOperation op = bankOperationRepository.findByCorrelationId(correlationId)
+                            .orElseThrow(() -> new BusinessException("Bank op disappeared"));
+                    op.setStatus(BankOperationStatus.COMMITTING);
+                    op.setUpdatedAt(Instant.now());
+                    bankOperationRepository.save(op);
 
                     credit(
                             user.getId(),
                             amount,
-                            UUID.randomUUID().toString(),
+                            correlationId,
                             "Top-up from card " + card.getMaskedCardNumber(),
                             TransactionType.WALLET_TOP_UP
                     );
-
                     return getWalletByUserId(user.getId());
                 },
-                committedWallet -> log.info("Wallet top-up committed for user {}", username),
-                ex -> log.error("Wallet top-up rolled back for user {}: {}", username, ex.getMessage())
+                w -> log.info("Top-up DB committed [{}]", correlationId),
+                ex -> {
+                    log.error("Top-up DB commit failed [{}], rolling back bank: {}", correlationId, ex.getMessage());
+                    safelyRollbackBank(correlationId);
+                    markFailed(correlationId, "DB commit failed: " + ex.getMessage());
+                }
         );
 
-        return new WalletResponse(wallet.getId(), wallet.getBalance().setScale(2, RoundingMode.HALF_UP));
+        try {
+            bankClient.commitCharge(correlationId);
+            markCommitted(correlationId);
+        } catch (BankTimeoutException | BankUnavailableException e) {
+            markPendingFinalize(correlationId, "COMMIT deferred: " + e.getMessage());
+            log.warn("Commit deferred for {}, will be retried by reconciler", correlationId);
+        } catch (BusinessException e) {
+            log.error("Commit rejected by bank for {}: {}", correlationId, e.getMessage());
+            markPendingFinalize(correlationId, "COMMIT rejected: " + e.getMessage());
+        }
+
+        return new TopUpResultResponse(
+                "SUCCESS",
+                correlationId,
+                wallet.getId(),
+                wallet.getBalance().setScale(2, RoundingMode.HALF_UP),
+                null
+        );
+    }
+
+    private void safelyRollbackBank(String correlationId) {
+        try {
+            bankClient.rollbackCharge(correlationId);
+        } catch (Exception e) {
+            log.error("Bank rollback failed for {}: {}", correlationId, e.getMessage());
+        }
+    }
+
+    private void markPendingReconcile(String correlationId, String error) {
+        transactionManagerFacade.execute(
+                TransactionOptions.defaults("topup-mark-pending"),
+                () -> {
+                    BankOperation op = bankOperationRepository.findByCorrelationId(correlationId).orElseThrow();
+                    op.setStatus(BankOperationStatus.PENDING_RECONCILE);
+                    op.setUpdatedAt(Instant.now());
+                    op.setLastError(error);
+                    return bankOperationRepository.save(op);
+                },
+                null, null
+        );
+    }
+
+    private void markPendingFinalize(String correlationId, String error) {
+        transactionManagerFacade.execute(
+                TransactionOptions.defaults("topup-mark-finalize"),
+                () -> {
+                    BankOperation op = bankOperationRepository.findByCorrelationId(correlationId).orElseThrow();
+                    op.setStatus(BankOperationStatus.PENDING_FINALIZE);
+                    op.setUpdatedAt(Instant.now());
+                    op.setLastError(error);
+                    return bankOperationRepository.save(op);
+                },
+                null, null
+        );
+    }
+
+    private void markFailed(String correlationId, String error) {
+        transactionManagerFacade.execute(
+                TransactionOptions.defaults("topup-mark-failed"),
+                () -> {
+                    BankOperation op = bankOperationRepository.findByCorrelationId(correlationId).orElseThrow();
+                    op.setStatus(BankOperationStatus.FAILED);
+                    op.setUpdatedAt(Instant.now());
+                    op.setLastError(error);
+                    return bankOperationRepository.save(op);
+                },
+                null, null
+        );
+    }
+
+    private void markCommitted(String correlationId) {
+        transactionManagerFacade.execute(
+                TransactionOptions.defaults("topup-mark-committed"),
+                () -> {
+                    BankOperation op = bankOperationRepository.findByCorrelationId(correlationId).orElseThrow();
+                    op.setStatus(BankOperationStatus.COMMITTED);
+                    op.setUpdatedAt(Instant.now());
+                    return bankOperationRepository.save(op);
+                },
+                null, null
+        );
     }
 
     @Override

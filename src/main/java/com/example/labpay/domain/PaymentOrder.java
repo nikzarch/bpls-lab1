@@ -8,7 +8,10 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 @Entity
-@Table(name = "payment_orders")
+@Table(name = "payment_orders", indexes = {
+        @Index(name = "idx_order_status", columnList = "status"),
+        @Index(name = "idx_order_correlation", columnList = "paymentCorrelationId")
+})
 @Getter
 @Setter
 @Builder
@@ -23,7 +26,7 @@ public class PaymentOrder {
     @JoinColumn(name = "product_id")
     private ProductOffer product;
 
-    @Column(nullable = false,name = "buyer_id")
+    @Column(nullable = false, name = "buyer_id")
     private Long buyerId;
 
     @Enumerated(EnumType.STRING)
@@ -35,6 +38,9 @@ public class PaymentOrder {
 
     @Column(nullable = false, unique = true)
     private String externalOrderId;
+
+    @Column
+    private String paymentCorrelationId;
 
     @Column(nullable = false)
     private Instant createdAt;

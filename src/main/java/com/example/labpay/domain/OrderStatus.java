@@ -2,6 +2,9 @@ package com.example.labpay.domain;
 
 public enum OrderStatus {
     CREATED,
+    CHARGING,
     PAID,
-    CANCELLED
+    PENDING_RECONCILE,
+    CANCELLED,
+    FAILED
 }

@@ -1,104 +1,201 @@
 package com.example.labpay.service.impl;
 
+import com.example.labpay.exception.BankTimeoutException;
+import com.example.labpay.exception.BankUnavailableException;
 import com.example.labpay.exception.BusinessException;
 import com.example.labpay.mq.BankCommandMessage;
 import com.example.labpay.mq.BankReplyMessage;
 import com.example.labpay.service.BankClient;
+import com.example.labpay.service.dto.BankChargeResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
+import jakarta.jms.Message;
+import jakarta.jms.TextMessage;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jms.JmsException;
 import org.springframework.jms.core.JmsTemplate;
+import org.springframework.jms.core.MessageCreator;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class BankClientImpl implements BankClient {
 
     private final JmsTemplate jmsTemplate;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    private static final String REQUEST_QUEUE = "bank.requests";
-    private static final String RESPONSE_QUEUE = "bank.responses";
+    private final String requestQueue;
+    private final String replyQueue;
+    private final long receiveTimeoutMs;
 
-    private BankReplyMessage call(String op, Object payloadObj) {
+    public BankClientImpl(
+            JmsTemplate jmsTemplate,
+            @Value("${app.bank.request-queue:bank.requests}") String requestQueue,
+            @Value("${app.bank.reply-queue:bank.responses}") String replyQueue,
+            @Value("${app.bank.receive-timeout-ms:5000}") long receiveTimeoutMs
+    ) {
+        this.jmsTemplate = jmsTemplate;
+        this.requestQueue = requestQueue;
+        this.replyQueue = replyQueue;
+        this.receiveTimeoutMs = receiveTimeoutMs;
+    }
+
+    private BankReplyMessage call(String op, String correlationId, Object payloadObj) {
         try {
-            String correlationId = UUID.randomUUID().toString();
-
             String payload = mapper.writeValueAsString(payloadObj);
-            BankCommandMessage cmd =
-                    new BankCommandMessage(correlationId, op, payload, RESPONSE_QUEUE);
+            BankCommandMessage cmd = new BankCommandMessage(correlationId, op, payload, replyQueue);
             String json = mapper.writeValueAsString(cmd);
-            log.info(json);
-            jmsTemplate.convertAndSend(REQUEST_QUEUE, json);
 
-            String raw = (String) jmsTemplate.receiveAndConvert(RESPONSE_QUEUE);
-            log.info(raw);
-            BankReplyMessage reply =
-                    mapper.readValue(raw, BankReplyMessage.class);
+            MessageCreator creator = (session) -> {
+                TextMessage m = session.createTextMessage(json);
+                m.setJMSCorrelationID(correlationId);
+                return m;
+            };
 
-            if (!reply.correlationId().equals(correlationId)) {
-                throw new BusinessException("Invalid bank reply");
+            try {
+                jmsTemplate.send(requestQueue, creator);
+            } catch (JmsException ex) {
+                log.warn("Bank send failed [{} corr={}]: {}", op, correlationId, ex.getMessage());
+                throw new BankUnavailableException("Bank send failed", ex);
             }
 
-            if (!reply.ok()) {
-                throw new BusinessException(reply.error());
+            String selector = "JMSCorrelationID = '" + correlationId + "'";
+            long previous = jmsTemplate.getReceiveTimeout();
+            jmsTemplate.setReceiveTimeout(receiveTimeoutMs);
+            Message reply;
+            try {
+                reply = jmsTemplate.receiveSelected(replyQueue, selector);
+            } catch (JmsException ex) {
+                log.warn("Bank receive failed [{} corr={}]: {}", op, correlationId, ex.getMessage());
+                throw new BankUnavailableException("Bank receive failed", ex);
+            } finally {
+                jmsTemplate.setReceiveTimeout(previous);
             }
 
-            return reply;
+            if (reply == null) {
+                log.warn("Bank reply timeout [{} corr={}]", op, correlationId);
+                throw new BankTimeoutException(correlationId, "Bank did not reply within " + receiveTimeoutMs + "ms");
+            }
 
+            String raw;
+            if (reply instanceof TextMessage tm) {
+                raw = tm.getText();
+            } else {
+                raw = reply.getBody(String.class);
+            }
+
+            BankReplyMessage parsed = mapper.readValue(raw, BankReplyMessage.class);
+            if (parsed.correlationId() != null && !parsed.correlationId().equals(correlationId)) {
+                throw new BusinessException("Bank correlation mismatch");
+            }
+            return parsed;
+
+        } catch (BankUnavailableException | BankTimeoutException | BusinessException e) {
+            throw e;
         } catch (Exception e) {
-            log.error("Bank unavaiable",e);
-            throw new BusinessException("Bank unavailable");
+            log.error("Bank call unexpected failure [{} corr={}]", op, correlationId, e);
+            throw new BankUnavailableException("Bank call failed: " + e.getMessage(), e);
+        }
+    }
+
+    private BankChargeResult parseCharge(String payload, String fallbackCorr) {
+        try {
+            if (payload == null || payload.isBlank()) {
+                return BankChargeResult.notFound(fallbackCorr);
+            }
+            var node = mapper.readTree(payload);
+            if (node.has("status") && "NOT_FOUND".equals(node.path("status").asText())) {
+                return BankChargeResult.notFound(fallbackCorr);
+            }
+            String corr = node.path("correlation_id").asText(fallbackCorr);
+            String status = node.path("status").asText("UNKNOWN");
+            BigDecimal amount = node.has("amount") ? new BigDecimal(node.path("amount").asText("0")) : null;
+            String cardNumber = node.path("card_number").asText(null);
+            boolean direct = node.path("direct").asBoolean(false);
+            Instant expiresAt = node.hasNonNull("expires_at") && !node.path("expires_at").asText().isEmpty()
+                    ? Instant.parse(node.path("expires_at").asText()) : null;
+            Instant resolvedAt = node.hasNonNull("resolved_at") && !node.path("resolved_at").asText().isEmpty()
+                    ? Instant.parse(node.path("resolved_at").asText()) : null;
+            String error = node.path("error").asText(null);
+            return new BankChargeResult(corr, status, amount, cardNumber, direct, expiresAt, resolvedAt, error);
+        } catch (Exception e) {
+            log.warn("Failed to parse charge payload: {}", e.getMessage());
+            return BankChargeResult.notFound(fallbackCorr);
         }
     }
 
     @Override
     public String initiateBind(String cardNumber, String cvv, String expiry) {
-        return call("INIT_BIND",
-                Map.of(
-                        "cardNumber", cardNumber,
-                        "cvv", cvv,
-                        "expiry", expiry
-                )).payload();
+        BankReplyMessage r = call("INIT_BIND", UUID.randomUUID().toString(),
+                Map.of("cardNumber", cardNumber, "cvv", cvv, "expiry", expiry));
+        if (!r.ok()) throw new BusinessException(r.error());
+        return r.payload();
     }
 
     @Override
     public void confirm3ds(String sessionId, String code) {
-        call("CONFIRM_3DS",
-                Map.of(
-                        "sessionId", sessionId,
-                        "code", code
-                ));
+        BankReplyMessage r = call("CONFIRM_3DS", UUID.randomUUID().toString(),
+                Map.of("sessionId", sessionId, "code", code));
+        if (!r.ok()) throw new BusinessException(r.error());
     }
 
     @Override
     public String initiateCharge(String cardNumber, double amount) {
-        return call("INIT_CHARGE",
-                Map.of(
-                        "cardNumber", cardNumber,
-                        "amount", amount
-                )).payload();
+        BankReplyMessage r = call("INIT_CHARGE", UUID.randomUUID().toString(),
+                Map.of("cardNumber", cardNumber, "amount", amount));
+        if (!r.ok()) throw new BusinessException(r.error());
+        return r.payload();
     }
 
     @Override
     public void completeCharge(String sessionId, double amount) {
-        call("COMPLETE_CHARGE",
-                Map.of(
-                        "sessionId", sessionId,
-                        "amount", amount
-                ));
+        BankReplyMessage r = call("COMPLETE_CHARGE", UUID.randomUUID().toString(),
+                Map.of("sessionId", sessionId, "amount", amount));
+        if (!r.ok()) throw new BusinessException(r.error());
     }
 
     @Override
-    public void directCharge(String cardNumber, double amount) {
-        call("DIRECT_CHARGE",
-                Map.of(
-                        "cardNumber", cardNumber,
-                        "amount", amount
-                ));
+    public BankChargeResult prepareCharge(String correlationId, String cardNumber, double amount) {
+        BankReplyMessage r = call("PREPARE_CHARGE", correlationId,
+                Map.of("correlationId", correlationId, "cardNumber", cardNumber, "amount", amount));
+        if (!r.ok()) throw new BusinessException(r.error());
+        return parseCharge(r.payload(), correlationId);
+    }
+
+    @Override
+    public BankChargeResult commitCharge(String correlationId) {
+        BankReplyMessage r = call("COMMIT_CHARGE_2PC", correlationId,
+                Map.of("correlationId", correlationId));
+        if (!r.ok()) throw new BusinessException(r.error());
+        return parseCharge(r.payload(), correlationId);
+    }
+
+    @Override
+    public BankChargeResult rollbackCharge(String correlationId) {
+        BankReplyMessage r = call("ROLLBACK_CHARGE", correlationId,
+                Map.of("correlationId", correlationId));
+        if (!r.ok()) throw new BusinessException(r.error());
+        return parseCharge(r.payload(), correlationId);
+    }
+
+    @Override
+    public BankChargeResult directCharge(String correlationId, String cardNumber, double amount) {
+        BankReplyMessage r = call("DIRECT_CHARGE", correlationId,
+                Map.of("correlationId", correlationId, "cardNumber", cardNumber, "amount", amount));
+        if (!r.ok()) throw new BusinessException(r.error());
+        return parseCharge(r.payload(), correlationId);
+    }
+
+    @Override
+    public BankChargeResult getChargeStatus(String correlationId) {
+        BankReplyMessage r = call("GET_CHARGE_STATUS", correlationId,
+                Map.of("correlationId", correlationId));
+        if (!r.ok()) throw new BusinessException(r.error());
+        return parseCharge(r.payload(), correlationId);
     }
 }
