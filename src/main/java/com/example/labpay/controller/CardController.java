@@ -1,5 +1,6 @@
 package com.example.labpay.controller;
 
+import com.example.labpay.camunda.BpmProcessFacade;
 import com.example.labpay.dto.request.BindCardRequest;
 import com.example.labpay.dto.request.Confirm3dsRequest;
 import com.example.labpay.dto.response.BindCardResultResponse;
@@ -21,18 +22,19 @@ import org.springframework.web.bind.annotation.*;
 public class CardController {
 
     private final CardService cardService;
+    private final BpmProcessFacade bpmProcessFacade;
 
     @PostMapping("/bind")
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
     public BindCardResultResponse bind(Authentication auth, @Valid @RequestBody BindCardRequest request) {
-        return cardService.bindCard(auth.getName(), request);
+        return bpmProcessFacade.startCardBinding(auth.getName(), request);
     }
 
     @PostMapping("/confirm-3ds")
     @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
     public CardResponse confirm3ds(Authentication auth, @Valid @RequestBody Confirm3dsRequest request) {
-        return cardService.confirm3ds(auth.getName(), request);
+        return bpmProcessFacade.completeCardBinding3ds(request.sessionId(), request.code());
     }
 
     @GetMapping

@@ -23,6 +23,7 @@ configurations {
 repositories {
 	mavenCentral()
 }
+ext { camundaVersion = '7.21.0' }
 
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
@@ -39,7 +40,9 @@ dependencies {
 
 	implementation 'jakarta.xml.bind:jakarta.xml.bind-api:4.0.5'
 	implementation 'org.glassfish.jaxb:jaxb-runtime:4.0.7'
-
+	implementation "org.camunda.bpm.springboot:camunda-bpm-spring-boot-starter-webapp:${camundaVersion}"
+	implementation "org.camunda.bpm.springboot:camunda-bpm-spring-boot-starter-rest:${camundaVersion}"
+	implementation "org.camunda.bpm:camunda-engine-plugin-spin:${camundaVersion}"
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
 

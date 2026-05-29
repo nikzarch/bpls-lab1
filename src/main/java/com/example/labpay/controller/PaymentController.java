@@ -1,5 +1,6 @@
 package com.example.labpay.controller;
 
+import com.example.labpay.camunda.BpmProcessFacade;
 import com.example.labpay.dto.request.CreatePaymentRequest;
 import com.example.labpay.dto.request.ProcessPaymentRequest;
 import com.example.labpay.dto.response.ListResponse;
@@ -20,18 +21,19 @@ import org.springframework.web.bind.annotation.*;
 public class PaymentController {
 
     private final PaymentService paymentService;
+    private final BpmProcessFacade bpmProcessFacade;
 
     @PostMapping("/create")
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
     public PaymentOrderResponse create(Authentication auth, @Valid @RequestBody CreatePaymentRequest request) {
-        return paymentService.createOrder(auth.getName(), request);
+        return bpmProcessFacade.startPaymentCreate(auth.getName(), request);
     }
 
     @PostMapping("/process")
     @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
     public PaymentOrderResponse process(Authentication auth, @Valid @RequestBody ProcessPaymentRequest request) {
-        return paymentService.processPayment(auth.getName(), request);
+        return bpmProcessFacade.startPaymentProcess(auth.getName(), request);
     }
 
     @GetMapping("/{id}")

@@ -1,5 +1,6 @@
 package com.example.labpay.controller;
 
+import com.example.labpay.camunda.BpmProcessFacade;
 import com.example.labpay.dto.request.TransferRequest;
 import com.example.labpay.dto.response.ListResponse;
 import com.example.labpay.dto.response.TransferResponse;
@@ -19,12 +20,13 @@ import org.springframework.web.bind.annotation.*;
 public class TransferController {
 
     private final TransferService transferService;
+    private final BpmProcessFacade bpmProcessFacade;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
     public TransferResponse create(Authentication auth, @Valid @RequestBody TransferRequest request) {
-        return transferService.createTransfer(auth.getName(), request);
+        return bpmProcessFacade.startTransfer(auth.getName(), request);
     }
 
     @GetMapping("/{id}")

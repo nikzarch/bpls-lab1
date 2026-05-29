@@ -1,17 +1,14 @@
 package com.example.labpay.controller;
 
-import com.example.labpay.batch.BatchJobRunner;
+import com.example.labpay.camunda.BpmProcessFacade;
 import lombok.RequiredArgsConstructor;
-import org.springframework.batch.core.JobExecution;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/admin/batch")
@@ -19,72 +16,50 @@ import java.util.stream.Collectors;
 @PreAuthorize("hasRole('ADMIN')")
 public class BatchAdminController {
 
-    private final BatchJobRunner batchJobRunner;
+    private final BpmProcessFacade bpmProcessFacade;
 
     @GetMapping("/jobs")
     public Map<String, Set<String>> jobs() {
-        return Map.of("jobs", batchJobRunner.jobNames());
+        return Map.of("jobs", Set.of(
+                "bank-reconciliation",
+                "hold-expiration",
+                "card-session-cleanup",
+                "stuck-transfer"
+        ));
     }
 
     @PostMapping("/jobs/{jobName}/run")
-    public ResponseEntity<BatchJobResponse> run(@PathVariable String jobName) throws Exception {
-        return started(batchJobRunner.run(jobName, "manual"));
+    public ResponseEntity<BpmProcessFacade.ProcessLaunchResult> run(@PathVariable String jobName) {
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(start(jobName));
     }
 
     @PostMapping("/bank-reconciliation/run")
-    public ResponseEntity<BatchJobResponse> runBankReconciliation() throws Exception {
-        return started(batchJobRunner.run("bankReconciliationJob", "manual"));
+    public ResponseEntity<BpmProcessFacade.ProcessLaunchResult> runBankReconciliation() {
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(start("bank-reconciliation"));
     }
 
     @PostMapping("/card-session-cleanup/run")
-    public ResponseEntity<BatchJobResponse> runCardSessionCleanup() throws Exception {
-        return started(batchJobRunner.run("cardSessionCleanupJob", "manual"));
+    public ResponseEntity<BpmProcessFacade.ProcessLaunchResult> runCardSessionCleanup() {
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(start("card-session-cleanup"));
     }
 
     @PostMapping("/hold-expiration/run")
-    public ResponseEntity<BatchJobResponse> runHoldExpiration() throws Exception {
-        return started(batchJobRunner.run("holdExpirationJob", "manual"));
+    public ResponseEntity<BpmProcessFacade.ProcessLaunchResult> runHoldExpiration() {
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(start("hold-expiration"));
     }
 
     @PostMapping("/stuck-transfer/run")
-    public ResponseEntity<BatchJobResponse> runStuckTransfer() throws Exception {
-        return started(batchJobRunner.run("stuckTransferJob", "manual"));
+    public ResponseEntity<BpmProcessFacade.ProcessLaunchResult> runStuckTransfer() {
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(start("stuck-transfer"));
     }
 
-    private ResponseEntity<BatchJobResponse> started(JobExecution execution) {
-        return ResponseEntity
-                .status(HttpStatus.ACCEPTED)
-                .body(BatchJobResponse.from(execution));
-    }
-
-    public record BatchJobResponse(
-            Long executionId,
-            String jobName,
-            String status,
-            String exitStatus,
-            LocalDateTime startTime,
-            LocalDateTime endTime,
-            Map<String, Object> parameters
-    ) {
-        static BatchJobResponse from(JobExecution e) {
-            Map<String, Object> params = e.getJobParameters()
-                    .getParameters()
-                    .entrySet()
-                    .stream()
-                    .collect(Collectors.toMap(
-                            Map.Entry::getKey,
-                            x -> x.getValue().getValue()
-                    ));
-
-            return new BatchJobResponse(
-                    e.getId(),
-                    e.getJobInstance().getJobName(),
-                    e.getStatus().name(),
-                    e.getExitStatus().getExitCode(),
-                    e.getStartTime(),
-                    e.getEndTime(),
-                    params
-            );
-        }
+    private BpmProcessFacade.ProcessLaunchResult start(String jobName) {
+        return switch (jobName) {
+            case "bank-reconciliation" -> bpmProcessFacade.start("maintenance-bank-reconciliation", Map.of("trigger", "manual"));
+            case "hold-expiration" -> bpmProcessFacade.start("maintenance-hold-expiration", Map.of("trigger", "manual"));
+            case "card-session-cleanup" -> bpmProcessFacade.start("maintenance-card-session-cleanup", Map.of("trigger", "manual"));
+            case "stuck-transfer" -> bpmProcessFacade.start("maintenance-stuck-transfer", Map.of("trigger", "manual"));
+            default -> throw new IllegalArgumentException("Unknown maintenance job: " + jobName);
+        };
     }
 }

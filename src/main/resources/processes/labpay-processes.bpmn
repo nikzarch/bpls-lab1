@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+    xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+    xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+    xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+    xmlns:camunda="http://camunda.org/schema/1.0/bpmn"
+    id="Definitions_1"
+    targetNamespace="http://camunda.org/examples">
+
+  <bpmn:collaboration id="Collaboration_Labpay">
+    <bpmn:participant id="Participant_CardBinding" name="Привязка карты" processRef="card-binding-process"/>
+    <bpmn:participant id="Participant_PaymentCreate" name="Создание платежа" processRef="payment-create-process"/>
+    <bpmn:participant id="Participant_PaymentProcess" name="Проведение платежа" processRef="payment-process"/>
+    <bpmn:participant id="Participant_Transfer" name="Перевод" processRef="transfer-process"/>
+    <bpmn:participant id="Participant_TopUp" name="Пополнение кошелька" processRef="wallet-top-up-process"/>
+    <bpmn:participant id="Participant_Maint1" name="Сверка банка" processRef="maintenance-bank-reconciliation"/>
+    <bpmn:participant id="Participant_Maint2" name="Истечение холдов" processRef="maintenance-hold-expiration"/>
+    <bpmn:participant id="Participant_Maint3" name="Очистка 3DS-сессий" processRef="maintenance-card-session-cleanup"/>
+    <bpmn:participant id="Participant_Maint4" name="Зависшие переводы" processRef="maintenance-stuck-transfer"/>
+  </bpmn:collaboration>
+
+<bpmn:process id="card-binding-process" name="Привязка карты" isExecutable="true" camunda:historyTimeToLive="30">
+  <bpmn:startEvent id="card-binding-start" name="Старт привязки" camunda:formRef="card-binding-start" camunda:formRefBinding="latest">
+    <bpmn:outgoing>cb_flow_1</bpmn:outgoing>
+  </bpmn:startEvent>
+  <bpmn:serviceTask id="card-binding-start-task" name="Проверить карту и создать 3DS-сессию" camunda:delegateExpression="${cardBindingStartDelegate}">
+    <bpmn:incoming>cb_flow_1</bpmn:incoming>
+    <bpmn:outgoing>cb_flow_2</bpmn:outgoing>
+  </bpmn:serviceTask>
+  <bpmn:exclusiveGateway id="card-binding-requires-3ds" name="Нужен 3DS?">
+    <bpmn:incoming>cb_flow_2</bpmn:incoming>
+    <bpmn:outgoing>cb_flow_3_yes</bpmn:outgoing>
+    <bpmn:outgoing>cb_flow_3_no</bpmn:outgoing>
+  </bpmn:exclusiveGateway>
+  <bpmn:endEvent id="card-binding-end-no-3ds" name="Карта привязана">
+    <bpmn:incoming>cb_flow_3_no</bpmn:incoming>
+  </bpmn:endEvent>
+  <bpmn:userTask id="card-binding-confirm-task" name="Подтвердить 3DS" camunda:formRef="card-binding-confirm" camunda:formRefBinding="latest">
+    <bpmn:incoming>cb_flow_3_yes</bpmn:incoming>
+    <bpmn:outgoing>cb_flow_4</bpmn:outgoing>
+  </bpmn:userTask>
+  <bpmn:serviceTask id="card-binding-confirm-service" name="Завершить привязку карты" camunda:delegateExpression="${cardBindingConfirmDelegate}">
+    <bpmn:incoming>cb_flow_4</bpmn:incoming>
+    <bpmn:outgoing>cb_flow_5</bpmn:outgoing>
+  </bpmn:serviceTask>
+  <bpmn:endEvent id="card-binding-end" name="Карта привязана">
+    <bpmn:incoming>cb_flow_5</bpmn:incoming>
+  </bpmn:endEvent>
+
+  <bpmn:sequenceFlow id="cb_flow_1" sourceRef="card-binding-start" targetRef="card-binding-start-task"/>
+  <bpmn:sequenceFlow id="cb_flow_2" sourceRef="card-binding-start-task" targetRef="card-binding-requires-3ds"/>
+  <bpmn:sequenceFlow id="cb_flow_3_yes" sourceRef="card-binding-requires-3ds" targetRef="card-binding-confirm-task">
+    <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${requires3ds}</bpmn:conditionExpression>
+  </bpmn:sequenceFlow>
+  <bpmn:sequenceFlow id="cb_flow_3_no" sourceRef="card-binding-requires-3ds" targetRef="card-binding-end-no-3ds">
+    <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${!requires3ds}</bpmn:conditionExpression>
+  </bpmn:sequenceFlow>
+  <bpmn:sequenceFlow id="cb_flow_4" sourceRef="card-binding-confirm-task" targetRef="card-binding-confirm-service"/>
+  <bpmn:sequenceFlow id="cb_flow_5" sourceRef="card-binding-confirm-service" targetRef="card-binding-end"/>
+</bpmn:process>
+
+<bpmn:process id="payment-create-process" name="Создание заказа оплаты" isExecutable="true" camunda:historyTimeToLive="30">
+  <bpmn:startEvent id="payment-create-process-start" name="Создание заказа оплаты" camunda:formRef="payment-create-start" camunda:formRefBinding="latest">
+    <bpmn:outgoing>payment-create-process_flow_1</bpmn:outgoing>
+  </bpmn:startEvent>
+  <bpmn:serviceTask id="payment-create-task" name="Создать заказ оплаты" camunda:delegateExpression="${paymentCreateDelegate}">
+    <bpmn:incoming>payment-create-process_flow_1</bpmn:incoming>
+    <bpmn:outgoing>payment-create-process_flow_2</bpmn:outgoing>
+  </bpmn:serviceTask>
+  <bpmn:endEvent id="payment-create-process-end" name="Заказ создан">
+    <bpmn:incoming>payment-create-process_flow_2</bpmn:incoming>
+  </bpmn:endEvent>
+  <bpmn:sequenceFlow id="payment-create-process_flow_1" sourceRef="payment-create-process-start" targetRef="payment-create-task"/>
+  <bpmn:sequenceFlow id="payment-create-process_flow_2" sourceRef="payment-create-task" targetRef="payment-create-process-end"/>
+</bpmn:process>
+
+<bpmn:process id="payment-process" name="Провести оплату" isExecutable="true" camunda:historyTimeToLive="30">
+  <bpmn:startEvent id="payment-process-start" name="Провести оплату" camunda:formRef="payment-process-start" camunda:formRefBinding="latest">
+    <bpmn:outgoing>payment-process_flow_1</bpmn:outgoing>
+  </bpmn:startEvent>
+  <bpmn:serviceTask id="payment-process-task" name="Провести оплату" camunda:delegateExpression="${paymentProcessDelegate}">
+    <bpmn:incoming>payment-process_flow_1</bpmn:incoming>
+    <bpmn:outgoing>payment-process_flow_2</bpmn:outgoing>
+  </bpmn:serviceTask>
+  <bpmn:endEvent id="payment-process-end" name="Оплата завершена">
+    <bpmn:incoming>payment-process_flow_2</bpmn:incoming>
+  </bpmn:endEvent>
+  <bpmn:sequenceFlow id="payment-process_flow_1" sourceRef="payment-process-start" targetRef="payment-process-task"/>
+  <bpmn:sequenceFlow id="payment-process_flow_2" sourceRef="payment-process-task" targetRef="payment-process-end"/>
+</bpmn:process>
+
+<bpmn:process id="transfer-process" name="Создать перевод" isExecutable="true" camunda:historyTimeToLive="30">
+  <bpmn:startEvent id="transfer-process-start" name="Создать перевод" camunda:formRef="transfer-start" camunda:formRefBinding="latest">
+    <bpmn:outgoing>transfer-process_flow_1</bpmn:outgoing>
+  </bpmn:startEvent>
+  <bpmn:serviceTask id="transfer-task" name="Создать перевод" camunda:delegateExpression="${transferDelegate}">
+    <bpmn:incoming>transfer-process_flow_1</bpmn:incoming>
+    <bpmn:outgoing>transfer-process_flow_2</bpmn:outgoing>
+  </bpmn:serviceTask>
+  <bpmn:endEvent id="transfer-process-end" name="Перевод завершён">
+    <bpmn:incoming>transfer-process_flow_2</bpmn:incoming>
+  </bpmn:endEvent>
+  <bpmn:sequenceFlow id="transfer-process_flow_1" sourceRef="transfer-process-start" targetRef="transfer-task"/>
+  <bpmn:sequenceFlow id="transfer-process_flow_2" sourceRef="transfer-task" targetRef="transfer-process-end"/>
+</bpmn:process>
+
+<bpmn:process id="wallet-top-up-process" name="Пополнить кошелёк" isExecutable="true" camunda:historyTimeToLive="30">
+  <bpmn:startEvent id="wallet-top-up-process-start" name="Пополнить кошелёк" camunda:formRef="wallet-top-up-start" camunda:formRefBinding="latest">
+    <bpmn:outgoing>wallet-top-up-process_flow_1</bpmn:outgoing>
+  </bpmn:startEvent>
+  <bpmn:serviceTask id="wallet-top-up-task" name="Выполнить пополнение" camunda:delegateExpression="${walletTopUpDelegate}">
+    <bpmn:incoming>wallet-top-up-process_flow_1</bpmn:incoming>
+    <bpmn:outgoing>wallet-top-up-process_flow_2</bpmn:outgoing>
+  </bpmn:serviceTask>
+  <bpmn:endEvent id="wallet-top-up-process-end" name="Пополнение завершено">
+    <bpmn:incoming>wallet-top-up-process_flow_2</bpmn:incoming>
+  </bpmn:endEvent>
+  <bpmn:sequenceFlow id="wallet-top-up-process_flow_1" sourceRef="wallet-top-up-process-start" targetRef="wallet-top-up-task"/>
+  <bpmn:sequenceFlow id="wallet-top-up-process_flow_2" sourceRef="wallet-top-up-task" targetRef="wallet-top-up-process-end"/>
+</bpmn:process>
+
+<bpmn:process id="maintenance-bank-reconciliation" name="Сверка банковских операций" isExecutable="true" camunda:historyTimeToLive="30">
+  <bpmn:startEvent id="maintenance-bank-reconciliation-start" name="Сверка банковских операций">
+    <bpmn:outgoing>maintenance-bank-reconciliation_flow_1</bpmn:outgoing>
+    <bpmn:timerEventDefinition>
+      <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">R/PT30M</bpmn:timeCycle>
+    </bpmn:timerEventDefinition>
+  </bpmn:startEvent>
+
+  <bpmn:serviceTask id="maintenance-bank-reconciliation-task" name="Сверка банковских операций" camunda:delegateExpression="${bankReconciliationDelegate}">
+    <bpmn:incoming>maintenance-bank-reconciliation_flow_1</bpmn:incoming>
+    <bpmn:outgoing>maintenance-bank-reconciliation_flow_2</bpmn:outgoing>
+  </bpmn:serviceTask>
+
+  <bpmn:endEvent id="maintenance-bank-reconciliation-end" name="Завершено">
+    <bpmn:incoming>maintenance-bank-reconciliation_flow_2</bpmn:incoming>
+  </bpmn:endEvent>
+
+  <bpmn:sequenceFlow id="maintenance-bank-reconciliation_flow_1" sourceRef="maintenance-bank-reconciliation-start" targetRef="maintenance-bank-reconciliation-task"/>
+  <bpmn:sequenceFlow id="maintenance-bank-reconciliation_flow_2" sourceRef="maintenance-bank-reconciliation-task" targetRef="maintenance-bank-reconciliation-end"/>
+</bpmn:process>
+
+<bpmn:process id="maintenance-hold-expiration" name="Истечение холдов" isExecutable="true" camunda:historyTimeToLive="30">
+  <bpmn:startEvent id="maintenance-hold-expiration-start" name="Истечение холдов">
+    <bpmn:outgoing>maintenance-hold-expiration_flow_1</bpmn:outgoing>
+    <bpmn:timerEventDefinition>
+      <bpmn:timeCycle>R/PT15M</bpmn:timeCycle>
+    </bpmn:timerEventDefinition>
+  </bpmn:startEvent>
+  <bpmn:serviceTask id="maintenance-hold-expiration-task" name="Истечение холдов" camunda:delegateExpression="${holdExpirationDelegate}">
+    <bpmn:incoming>maintenance-hold-expiration_flow_1</bpmn:incoming>
+    <bpmn:outgoing>maintenance-hold-expiration_flow_2</bpmn:outgoing>
+  </bpmn:serviceTask>
+  <bpmn:endEvent id="maintenance-hold-expiration-end" name="Завершено">
+    <bpmn:incoming>maintenance-hold-expiration_flow_2</bpmn:incoming>
+  </bpmn:endEvent>
+  <bpmn:sequenceFlow id="maintenance-hold-expiration_flow_1" sourceRef="maintenance-hold-expiration-start" targetRef="maintenance-hold-expiration-task"/>
+  <bpmn:sequenceFlow id="maintenance-hold-expiration_flow_2" sourceRef="maintenance-hold-expiration-task" targetRef="maintenance-hold-expiration-end"/>
+</bpmn:process>
+
+<bpmn:process id="maintenance-card-session-cleanup" name="Очистка 3DS-сессий" isExecutable="true" camunda:historyTimeToLive="30">
+  <bpmn:startEvent id="maintenance-card-session-cleanup-start" name="Очистка 3DS-сессий">
+    <bpmn:outgoing>maintenance-card-session-cleanup_flow_1</bpmn:outgoing>
+    <bpmn:timerEventDefinition>
+      <bpmn:timeCycle>R/PT1H</bpmn:timeCycle>
+    </bpmn:timerEventDefinition>
+  </bpmn:startEvent>
+  <bpmn:serviceTask id="maintenance-card-session-cleanup-task" name="Очистка 3DS-сессий" camunda:delegateExpression="${cardSessionCleanupDelegate}">
+    <bpmn:incoming>maintenance-card-session-cleanup_flow_1</bpmn:incoming>
+    <bpmn:outgoing>maintenance-card-session-cleanup_flow_2</bpmn:outgoing>
+  </bpmn:serviceTask>
+  <bpmn:endEvent id="maintenance-card-session-cleanup-end" name="Завершено">
+    <bpmn:incoming>maintenance-card-session-cleanup_flow_2</bpmn:incoming>
+  </bpmn:endEvent>
+  <bpmn:sequenceFlow id="maintenance-card-session-cleanup_flow_1" sourceRef="maintenance-card-session-cleanup-start" targetRef="maintenance-card-session-cleanup-task"/>
+  <bpmn:sequenceFlow id="maintenance-card-session-cleanup_flow_2" sourceRef="maintenance-card-session-cleanup-task" targetRef="maintenance-card-session-cleanup-end"/>
+</bpmn:process>
+
+<bpmn:process id="maintenance-stuck-transfer" name="Обработка зависших переводов" isExecutable="true" camunda:historyTimeToLive="30">
+  <bpmn:startEvent id="maintenance-stuck-transfer-start" name="Обработка зависших переводов">
+    <bpmn:outgoing>maintenance-stuck-transfer_flow_1</bpmn:outgoing>
+    <bpmn:timerEventDefinition>
+      <bpmn:timeCycle>R/PT10M</bpmn:timeCycle>
+    </bpmn:timerEventDefinition>
+  </bpmn:startEvent>
+  <bpmn:serviceTask id="maintenance-stuck-transfer-task" name="Обработка зависших переводов" camunda:delegateExpression="${stuckTransferDelegate}">
+    <bpmn:incoming>maintenance-stuck-transfer_flow_1</bpmn:incoming>
+    <bpmn:outgoing>maintenance-stuck-transfer_flow_2</bpmn:outgoing>
+  </bpmn:serviceTask>
+  <bpmn:endEvent id="maintenance-stuck-transfer-end" name="Завершено">
+    <bpmn:incoming>maintenance-stuck-transfer_flow_2</bpmn:incoming>
+  </bpmn:endEvent>
+  <bpmn:sequenceFlow id="maintenance-stuck-transfer_flow_1" sourceRef="maintenance-stuck-transfer-start" targetRef="maintenance-stuck-transfer-task"/>
+  <bpmn:sequenceFlow id="maintenance-stuck-transfer_flow_2" sourceRef="maintenance-stuck-transfer-task" targetRef="maintenance-stuck-transfer-end"/>
+</bpmn:process>
+
+</bpmn:definitions>

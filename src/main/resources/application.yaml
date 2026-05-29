@@ -26,6 +26,7 @@ spring:
     pub-sub-domain: false
   datasource:
     xa:
+      max-pool-size: 25
       data-source-class-name: org.postgresql.xa.PGXADataSource
       properties:
         serverName: localhost
@@ -38,6 +39,7 @@ spring:
       enabled: false
     jdbc:
       initialize-schema: always
+      isolation-level-for-create: DEFAULT
 
 springdoc:
   api-docs:
@@ -86,3 +88,23 @@ app:
     stuck-transfer:
       cron: "0 */10 * * * *"
       cutoff-minutes: 30
+
+camunda:
+  bpm:
+    admin-user:
+      id: admin
+      password: admin
+      firstName: Admin
+
+    filter:
+      create: All tasks
+
+    auto-deployment-enabled: true
+
+    history-level: full
+
+    authorization:
+      enabled: false
+
+    job-execution:
+      enabled: true

@@ -1,5 +1,6 @@
 package com.example.labpay.controller;
 
+import com.example.labpay.camunda.BpmProcessFacade;
 import com.example.labpay.dto.request.TopUpRequest;
 import com.example.labpay.dto.response.ListResponse;
 import com.example.labpay.dto.response.TopUpResultResponse;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 public class WalletController {
 
     private final WalletService walletService;
+    private final BpmProcessFacade bpmProcessFacade;
 
     @GetMapping
     @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
@@ -32,7 +34,7 @@ public class WalletController {
     @PostMapping("/top-up")
     @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
     public ResponseEntity<TopUpResultResponse> topUp(Authentication auth, @Valid @RequestBody TopUpRequest request) {
-        TopUpResultResponse result = walletService.topUp(auth.getName(), request);
+        TopUpResultResponse result = bpmProcessFacade.startTopUp(auth.getName(), request);
         HttpStatus status = "PENDING".equals(result.state()) ? HttpStatus.ACCEPTED : HttpStatus.OK;
         return ResponseEntity.status(status).body(result);
     }
