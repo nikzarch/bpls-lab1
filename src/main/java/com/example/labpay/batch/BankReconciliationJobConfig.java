@@ -32,7 +32,7 @@ public class BankReconciliationJobConfig {
     private final EntityManagerFactory emf;
     private final ReconciliationService reconciliationService;
 
-    @Value("${app.batch.chunk-size:200}")
+    @Value("${app.batch.chunk-size:25}")
     private int chunkSize;
 
     @Bean
@@ -41,6 +41,7 @@ public class BankReconciliationJobConfig {
         return new ItemReader<>() {
             private final Deque<BankOperation> buffer = new ArrayDeque<>();
             private boolean exhausted = false;
+            private long lastId = 0L;
 
             @Override
             public BankOperation read() {
@@ -49,7 +50,7 @@ public class BankReconciliationJobConfig {
                         return null;
                     }
 
-                    List<BankOperation> page = fetchPage();
+                    List<BankOperation> page = fetchPage(lastId);
 
                     if (page.isEmpty()) {
                         exhausted = true;
@@ -57,6 +58,7 @@ public class BankReconciliationJobConfig {
                     }
 
                     buffer.addAll(page);
+                    lastId = page.get(page.size() - 1).getId();
 
                     if (page.size() < chunkSize) {
                         exhausted = true;
@@ -68,19 +70,21 @@ public class BankReconciliationJobConfig {
         };
     }
 
-    private List<BankOperation> fetchPage() {
+    private List<BankOperation> fetchPage(long afterId) {
         EntityManager em = emf.createEntityManager();
         try {
             return em.createQuery("""
                             select o
                             from BankOperation o
                             where o.status in :statuses
+                              and o.id > :afterId
                             order by o.id asc
                             """, BankOperation.class)
                     .setParameter("statuses", List.of(
                             BankOperationStatus.PENDING_RECONCILE,
                             BankOperationStatus.PENDING_FINALIZE
                     ))
+                    .setParameter("afterId", afterId)
                     .setMaxResults(chunkSize)
                     .getResultList();
         } finally {

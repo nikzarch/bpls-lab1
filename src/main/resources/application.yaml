@@ -26,8 +26,8 @@ spring:
     pub-sub-domain: false
   datasource:
     xa:
-      min-pool-size: 3
-      max-pool-size: 30
+      min-pool-size: 5
+      max-pool-size: 60
       borrow-connection-timeout: 60
       reap-timeout: 0
       max-idle-time: 60
@@ -44,7 +44,7 @@ spring:
       enabled: false
     jdbc:
       initialize-schema: always
-      isolation-level-for-create: DEFAULT
+      isolation-level-for-create: READ_COMMITTED
 
 springdoc:
   api-docs:
@@ -82,7 +82,7 @@ app:
     responsible-user-id: 1
     timeout-ms: 10000
   batch:
-    chunk-size: 100
+    chunk-size: 25
     bank-reconciliation:
       cron: "0 */1 * * * *"
       max-attempts: 30
@@ -111,9 +111,9 @@ camunda:
       enabled: false
     job-execution:
       enabled: true
-      core-pool-size: 2
-      max-pool-size: 4
-      queue-size: 16
-      max-jobs-per-acquisition: 2
+      core-pool-size: 1
+      max-pool-size: 2
+      queue-size: 3
+      max-jobs-per-acquisition: 1
       wait-time-in-millis: 5000
       lock-time-in-millis: 300000

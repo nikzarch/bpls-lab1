@@ -9,11 +9,6 @@
     id="Definitions_Labpay"
     targetNamespace="http://labpay.example.com/bpmn">
 
-  <!--
-    Главный процесс оплаты.
-    Это теперь один связанный executable process, который открывается в bpmn.io и Cockpit как цельная диаграмма.
-    Старые process id сохранены ниже для обратной совместимости с текущими REST-контроллерами.
-  -->
   <bpmn:process id="payment-process" name="Проведение платежа" isExecutable="true" camunda:historyTimeToLive="30">
     <bpmn:startEvent id="payment-process-start" name="Старт оплаты" camunda:formRef="payment-process-start" camunda:formRefBinding="deployment">
       <bpmn:outgoing>pp_flow_start_to_has_order</bpmn:outgoing>
@@ -148,7 +143,6 @@
     <bpmn:sequenceFlow id="pp_flow_3ds_timeout_to_error" sourceRef="pp_card_binding_3ds_timeout" targetRef="pp_3ds_timeout_end" />
   </bpmn:process>
 
-  <!-- Отдельная привязка карты сохранена для /api/cards/bind и /api/bpm/cards/bind. -->
   <bpmn:process id="card-binding-process" name="Привязка карты" isExecutable="true" camunda:historyTimeToLive="30">
     <bpmn:startEvent id="card-binding-start" name="Старт привязки" camunda:formRef="card-binding-start" camunda:formRefBinding="deployment">
       <bpmn:outgoing>cb_flow_1</bpmn:outgoing>
