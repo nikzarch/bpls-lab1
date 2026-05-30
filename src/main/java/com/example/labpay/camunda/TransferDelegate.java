@@ -1,5 +1,6 @@
 package com.example.labpay.camunda;
 
+import com.example.labpay.domain.transfer.TransferType;
 import com.example.labpay.dto.request.TransferRequest;
 import com.example.labpay.dto.response.TransferResponse;
 import com.example.labpay.service.TransferService;
@@ -18,17 +19,19 @@ public class TransferDelegate extends AbstractCamundaDelegateSupport implements 
 
     @Override
     public void execute(DelegateExecution execution) {
-        String username = string(execution, "username");
+        String username = requiredString(execution, "username");
+
         TransferRequest request = new TransferRequest(
-                longValue(execution, "recipientId"),
-                decimal(execution, "amount"),
-                enumValue(execution, "source", TransferRequest.TransferSource.class),
-                enumValue(execution, "type", com.example.labpay.domain.transfer.TransferType.class),
+                requiredLong(execution, "recipientId"),
+                requiredDecimal(execution, "amount"),
+                requiredEnum(execution, "source", TransferRequest.TransferSource.class),
+                requiredEnum(execution, "type", TransferType.class),
                 string(execution, "cardToken"),
                 string(execution, "idempotencyKey")
         );
 
         TransferResponse response = transferService.createTransfer(username, request);
+
         execution.setVariable("transferId", response.id());
         execution.setVariable("senderId", response.senderId());
         execution.setVariable("recipientId", response.recipientId());

@@ -18,13 +18,15 @@ public class WalletTopUpDelegate extends AbstractCamundaDelegateSupport implemen
 
     @Override
     public void execute(DelegateExecution execution) {
-        String username = string(execution, "username");
+        String username = requiredString(execution, "username");
+
         TopUpRequest request = new TopUpRequest(
-                string(execution, "cardToken"),
-                decimal(execution, "amount")
+                requiredString(execution, "cardToken"),
+                requiredDecimal(execution, "amount")
         );
 
         TopUpResultResponse result = walletService.topUp(username, request);
+
         execution.setVariable("topUpState", result.state());
         execution.setVariable("topUpCorrelationId", result.correlationId());
         execution.setVariable("walletId", result.walletId());

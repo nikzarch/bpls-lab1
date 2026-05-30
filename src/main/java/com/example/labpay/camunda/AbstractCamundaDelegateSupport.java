@@ -1,6 +1,6 @@
-
 package com.example.labpay.camunda;
 
+import com.example.labpay.exception.BusinessException;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 
 import java.math.BigDecimal;
@@ -14,6 +14,14 @@ public abstract class AbstractCamundaDelegateSupport {
         return value == null ? null : String.valueOf(value);
     }
 
+    protected String requiredString(DelegateExecution execution, String key) {
+        String value = string(execution, key);
+        if (value == null || value.isBlank()) {
+            throw new BusinessException("Process variable '" + key + "' is required");
+        }
+        return value;
+    }
+
     protected Long longValue(DelegateExecution execution, String key) {
         Object value = execution.getVariable(key);
         if (value == null) {
@@ -23,6 +31,14 @@ public abstract class AbstractCamundaDelegateSupport {
             return number.longValue();
         }
         return Long.parseLong(String.valueOf(value));
+    }
+
+    protected Long requiredLong(DelegateExecution execution, String key) {
+        Long value = longValue(execution, key);
+        if (value == null) {
+            throw new BusinessException("Process variable '" + key + "' is required");
+        }
+        return value;
     }
 
     protected BigDecimal decimal(DelegateExecution execution, String key) {
@@ -37,6 +53,14 @@ public abstract class AbstractCamundaDelegateSupport {
             return new BigDecimal(number.toString());
         }
         return new BigDecimal(String.valueOf(value));
+    }
+
+    protected BigDecimal requiredDecimal(DelegateExecution execution, String key) {
+        BigDecimal value = decimal(execution, key);
+        if (value == null) {
+            throw new BusinessException("Process variable '" + key + "' is required");
+        }
+        return value;
     }
 
     protected Boolean bool(DelegateExecution execution, String key) {
@@ -56,6 +80,14 @@ public abstract class AbstractCamundaDelegateSupport {
             return null;
         }
         return Enum.valueOf(type, String.valueOf(value));
+    }
+
+    protected <E extends Enum<E>> E requiredEnum(DelegateExecution execution, String key, Class<E> type) {
+        E value = enumValue(execution, key, type);
+        if (value == null) {
+            throw new BusinessException("Process variable '" + key + "' is required");
+        }
+        return value;
     }
 
     protected Map<String, Object> snapshot(DelegateExecution execution, String... keys) {

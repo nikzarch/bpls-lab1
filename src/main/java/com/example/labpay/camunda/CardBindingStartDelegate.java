@@ -19,15 +19,21 @@ public class CardBindingStartDelegate extends AbstractCamundaDelegateSupport imp
 
     @Override
     public void execute(DelegateExecution execution) {
-        String username = string(execution, "username");
-        String bankSessionId = string(execution, "cardBindingSessionId");
+        String username = requiredString(execution, "username");
 
         BindCardRequest request = new BindCardRequest(
-                string(execution, "cardNumber"),
-                string(execution, "holderName"),
-                string(execution, "expiryDate"),
-                string(execution, "cvv")
+                requiredString(execution, "cardNumber"),
+                requiredString(execution, "holderName"),
+                requiredString(execution, "expiryDate"),
+                requiredString(execution, "cvv")
         );
+
+        String bankSessionId = string(execution, "cardBindingSessionId");
+
+        if (bankSessionId == null || bankSessionId.isBlank()) {
+            bankSessionId = cardService.callBankInitiateBind(request);
+            execution.setVariable("cardBindingSessionId", bankSessionId);
+        }
 
         BindCardResultResponse result = cardService.persistBindingSession(username, request, bankSessionId);
 

@@ -67,15 +67,12 @@ public class BpmProcessFacade {
     }
 
     public BindCardResultResponse startCardBinding(String username, BindCardRequest request) {
-        String bankSessionId = cardService.callBankInitiateBind(request);
-
         Map<String, Object> vars = new HashMap<>();
         vars.put("username", username);
         vars.put("cardNumber", request.cardNumber());
         vars.put("holderName", request.holderName());
         vars.put("expiryDate", request.expiryDate());
         vars.put("cvv", request.cvv());
-        vars.put("cardBindingSessionId", bankSessionId);
 
         ProcessLaunchResult result = start(CARD_BINDING_PROCESS, vars);
         return toBindCard(result.variables().orElse(Map.of()));

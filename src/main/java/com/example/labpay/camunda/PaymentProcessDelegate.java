@@ -18,14 +18,16 @@ public class PaymentProcessDelegate extends AbstractCamundaDelegateSupport imple
 
     @Override
     public void execute(DelegateExecution execution) {
-        String username = string(execution, "username");
+        String username = requiredString(execution, "username");
+
         ProcessPaymentRequest request = new ProcessPaymentRequest(
-                longValue(execution, "orderId"),
-                enumValue(execution, "method", ProcessPaymentRequest.PaymentMethod.class),
+                requiredLong(execution, "orderId"),
+                requiredEnum(execution, "method", ProcessPaymentRequest.PaymentMethod.class),
                 string(execution, "cardToken")
         );
 
         PaymentOrderResponse order = paymentService.processPayment(username, request);
+
         execution.setVariable("paymentOrderId", order.id());
         execution.setVariable("paymentExternalOrderId", order.externalOrderId());
         execution.setVariable("paymentStatus", order.status().name());
