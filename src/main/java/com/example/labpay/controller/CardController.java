@@ -34,7 +34,7 @@ public class CardController {
     @PostMapping("/confirm-3ds")
     @PreAuthorize("hasAnyRole('CUSTOMER', 'ADMIN')")
     public CardResponse confirm3ds(Authentication auth, @Valid @RequestBody Confirm3dsRequest request) {
-        return bpmProcessFacade.completeCardBinding3ds(request.sessionId(), request.code());
+        return bpmProcessFacade.completeCardBinding3ds(auth.getName(), request.sessionId(), request.code());
     }
 
     @GetMapping

@@ -10,6 +10,13 @@ import java.util.List;
 public interface CardService {
     BindCardResultResponse bindCard(String username, BindCardRequest request);
     CardResponse confirm3ds(String username, Confirm3dsRequest request);
+
+    String callBankInitiateBind(BindCardRequest request);
+    BindCardResultResponse persistBindingSession(String username, BindCardRequest request, String bankSessionId);
+
+    void callBankConfirm3ds(String sessionId, String code);
+    CardResponse persistConfirmedCard(String username, String sessionId);
+
     List<CardResponse> getUserCards(String username);
     void deleteCard(String username, Long cardId);
 }

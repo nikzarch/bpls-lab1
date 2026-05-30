@@ -41,32 +41,46 @@ public class CardServiceImpl implements CardService {
 
     @Override
     public BindCardResultResponse bindCard(String username, BindCardRequest request) {
+        validateRequest(username, request);
+        String bankSessionId = callBankInitiateBind(request);
+        return persistBindingSession(username, request, bankSessionId);
+    }
+
+    @Override
+    public String callBankInitiateBind(BindCardRequest request) {
+        String digits = request.cardNumber().replaceAll("\\s+", "");
+
+        if (!CardTokenizer.isValidLuhn(digits)) {
+            throw new BusinessException("Invalid card number");
+        }
+
+        String[] expiryParts = request.expiryDate().split("/");
+        int month = Integer.parseInt(expiryParts[0]);
+        int year = 2000 + Integer.parseInt(expiryParts[1]);
+        if (YearMonth.of(year, month).isBefore(YearMonth.now())) {
+            throw new BusinessException("Card is expired");
+        }
+
+        String bankSessionId = bankClient.initiateBind(digits, request.cvv(), request.expiryDate());
+
+        if (bankSessionId == null || bankSessionId.isBlank()) {
+            throw new BusinessException("Bank did not return 3DS session id");
+        }
+
+        return bankSessionId;
+    }
+
+    @Override
+    public BindCardResultResponse persistBindingSession(String username, BindCardRequest request, String bankSessionId) {
         return transactionManagerFacade.execute(
-                TransactionOptions.defaults("bind-card-transaction"),
+                TransactionOptions.defaults("bind-card-persist-transaction"),
                 () -> {
                     XmlAppUser user = userService.getByUsername(username);
                     String digits = request.cardNumber().replaceAll("\\s+", "");
-
-                    if (!CardTokenizer.isValidLuhn(digits)) {
-                        throw new BusinessException("Invalid card number");
-                    }
-
-                    String[] expiryParts = request.expiryDate().split("/");
-                    int month = Integer.parseInt(expiryParts[0]);
-                    int year = 2000 + Integer.parseInt(expiryParts[1]);
-                    if (YearMonth.of(year, month).isBefore(YearMonth.now())) {
-                        throw new BusinessException("Card is expired");
-                    }
-
                     String masked = CardTokenizer.maskCardNumber(digits);
+
                     if (bankCardRepository.existsByUserIdAndMaskedCardNumber(user.getId(), masked)) {
                         throw new BusinessException("Card already bound");
-                    }
-
-                    String bankSessionId = bankClient.initiateBind(digits, request.cvv(), request.expiryDate());
-
-                    if (bankSessionId == null || bankSessionId.isBlank()) {
-                        throw new BusinessException("Bank did not return 3DS session id");
                     }
 
                     sessionRepository.save(CardBindingSession.builder()
@@ -83,17 +97,28 @@ public class CardServiceImpl implements CardService {
 
                     return new BindCardResultResponse(true, bankSessionId, null, null);
                 },
-                result -> log.info("Card binding session created for user {}", username),
-                ex -> log.error("Bind card rolled back for user {}: {}", username, ex.getMessage())
+                result -> log.info("Card binding session persisted for user {}", username),
+                ex -> log.error("Persist binding session rolled back for user {}: {}", username, ex.getMessage())
         );
     }
 
     @Override
     public CardResponse confirm3ds(String username, Confirm3dsRequest request) {
+        callBankConfirm3ds(request.sessionId(), request.code());
+        return persistConfirmedCard(username, request.sessionId());
+    }
+
+    @Override
+    public void callBankConfirm3ds(String sessionId, String code) {
+        bankClient.confirm3ds(sessionId, code);
+    }
+
+    @Override
+    public CardResponse persistConfirmedCard(String username, String sessionId) {
         return transactionManagerFacade.execute(
-                TransactionOptions.defaults("confirm-3ds-transaction"),
+                TransactionOptions.defaults("confirm-3ds-persist-transaction"),
                 () -> {
-                    CardBindingSession session = sessionRepository.findBySessionId(request.sessionId())
+                    CardBindingSession session = sessionRepository.findBySessionId(sessionId)
                             .orElseThrow(() -> new NotFoundException("Session not found"));
 
                     if (session.isConfirmed()) {
@@ -107,8 +132,6 @@ public class CardServiceImpl implements CardService {
                     if (!session.getUserId().equals(user.getId())) {
                         throw new BusinessException("Session does not belong to user");
                     }
-
-                    bankClient.confirm3ds(request.sessionId(), request.code());
 
                     session.setConfirmed(true);
                     sessionRepository.save(session);
@@ -131,8 +154,8 @@ public class CardServiceImpl implements CardService {
 
                     return toResponse(card);
                 },
-                result -> log.info("3DS confirmed for user {}", username),
-                ex -> log.error("Confirm 3DS rolled back for user {}: {}", username, ex.getMessage())
+                result -> log.info("3DS confirmed and card persisted for user {}", username),
+                ex -> log.error("Persist confirmed card rolled back for user {}: {}", username, ex.getMessage())
         );
     }
 
@@ -163,6 +186,15 @@ public class CardServiceImpl implements CardService {
                 result -> log.info("Card {} deleted by user {}", cardId, username),
                 ex -> log.error("Delete card rolled back for user {}: {}", username, ex.getMessage())
         );
+    }
+
+    private void validateRequest(String username, BindCardRequest request) {
+        XmlAppUser user = userService.getByUsername(username);
+        String digits = request.cardNumber().replaceAll("\\s+", "");
+        String masked = CardTokenizer.maskCardNumber(digits);
+        if (bankCardRepository.existsByUserIdAndMaskedCardNumber(user.getId(), masked)) {
+            throw new BusinessException("Card already bound");
+        }
     }
 
     private CardResponse toResponse(BankCard card) {

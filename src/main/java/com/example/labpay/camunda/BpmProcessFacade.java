@@ -1,4 +1,3 @@
-
 package com.example.labpay.camunda;
 
 import com.example.labpay.domain.OrderStatus;
@@ -19,7 +18,11 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.*;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class BpmProcessFacade {
@@ -36,8 +39,10 @@ public class BpmProcessFacade {
     private final HistoryService historyService;
     private final CardService cardService;
 
-    public BpmProcessFacade(RuntimeService runtimeService, TaskService taskService,
-                            HistoryService historyService, CardService cardService) {
+    public BpmProcessFacade(RuntimeService runtimeService,
+                            TaskService taskService,
+                            HistoryService historyService,
+                            CardService cardService) {
         this.runtimeService = runtimeService;
         this.taskService = taskService;
         this.historyService = historyService;
@@ -62,7 +67,7 @@ public class BpmProcessFacade {
     }
 
     public BindCardResultResponse startCardBinding(String username, BindCardRequest request) {
-        BindCardResultResponse bankResult = cardService.bindCard(username, request);
+        String bankSessionId = cardService.callBankInitiateBind(request);
 
         Map<String, Object> vars = new HashMap<>();
         vars.put("username", username);
@@ -70,23 +75,16 @@ public class BpmProcessFacade {
         vars.put("holderName", request.holderName());
         vars.put("expiryDate", request.expiryDate());
         vars.put("cvv", request.cvv());
-        vars.put("requires3ds", bankResult.requires3ds());
-        vars.put("cardBindingSessionId", bankResult.sessionId());
-        vars.put("cardBindingConfirmationCode", bankResult.confirmationCode());
-        if (bankResult.card() != null) {
-            vars.put("cardId", bankResult.card().id());
-            vars.put("cardToken", bankResult.card().token());
-            vars.put("cardMaskedCardNumber", bankResult.card().maskedCardNumber());
-            vars.put("cardHolderName", bankResult.card().holderName());
-            vars.put("cardStatus", bankResult.card().status().name());
-        }
+        vars.put("cardBindingSessionId", bankSessionId);
 
-        start(CARD_BINDING_PROCESS, vars);
-        return bankResult;
+        ProcessLaunchResult result = start(CARD_BINDING_PROCESS, vars);
+        return toBindCard(result.variables().orElse(Map.of()));
     }
 
-    public CardResponse completeCardBinding3ds(String sessionId, String code) {
-        var processInstance = runtimeService.createProcessInstanceQuery()
+    public CardResponse completeCardBinding3ds(String username, String sessionId, String code) {
+        cardService.callBankConfirm3ds(sessionId, code);
+
+        ProcessInstance processInstance = runtimeService.createProcessInstanceQuery()
                 .processDefinitionKey(CARD_BINDING_PROCESS)
                 .variableValueEquals("cardBindingSessionId", sessionId)
                 .active()
@@ -123,7 +121,7 @@ public class BpmProcessFacade {
                 "username", username,
                 "orderId", request.orderId(),
                 "method", request.method().name(),
-                "cardToken", request.cardToken()
+                "cardToken", request.cardToken() == null ? "" : request.cardToken()
         ));
         return toPaymentOrder(result.variables().orElse(Map.of()));
     }
@@ -135,8 +133,8 @@ public class BpmProcessFacade {
                 "amount", request.amount().toPlainString(),
                 "source", request.source().name(),
                 "type", request.type().name(),
-                "cardToken", request.cardToken(),
-                "idempotencyKey", request.idempotencyKey()
+                "cardToken", request.cardToken() == null ? "" : request.cardToken(),
+                "idempotencyKey", request.idempotencyKey() == null ? "" : request.idempotencyKey()
         ));
         return toTransfer(result.variables().orElse(Map.of()));
     }
@@ -228,45 +226,27 @@ public class BpmProcessFacade {
     }
 
     private Long longValue(Object value) {
-        if (value == null) {
-            return null;
-        }
-        if (value instanceof Number number) {
-            return number.longValue();
-        }
+        if (value == null) return null;
+        if (value instanceof Number n) return n.longValue();
         return Long.parseLong(String.valueOf(value));
     }
 
     private BigDecimal decimalValue(Object value) {
-        if (value == null) {
-            return null;
-        }
-        if (value instanceof BigDecimal bigDecimal) {
-            return bigDecimal;
-        }
-        if (value instanceof Number number) {
-            return new BigDecimal(number.toString());
-        }
+        if (value == null) return null;
+        if (value instanceof BigDecimal b) return b;
+        if (value instanceof Number n) return new BigDecimal(n.toString());
         return new BigDecimal(String.valueOf(value));
     }
 
     private Instant instantValue(Object value) {
-        if (value == null) {
-            return null;
-        }
-        if (value instanceof Instant instant) {
-            return instant;
-        }
+        if (value == null) return null;
+        if (value instanceof Instant i) return i;
         return Instant.parse(String.valueOf(value));
     }
 
     private boolean booleanValue(Object value) {
-        if (value == null) {
-            return false;
-        }
-        if (value instanceof Boolean b) {
-            return b;
-        }
+        if (value == null) return false;
+        if (value instanceof Boolean b) return b;
         return Boolean.parseBoolean(String.valueOf(value));
     }
 

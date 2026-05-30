@@ -20,6 +20,8 @@ public class CardBindingStartDelegate extends AbstractCamundaDelegateSupport imp
     @Override
     public void execute(DelegateExecution execution) {
         String username = string(execution, "username");
+        String bankSessionId = string(execution, "cardBindingSessionId");
+
         BindCardRequest request = new BindCardRequest(
                 string(execution, "cardNumber"),
                 string(execution, "holderName"),
@@ -27,7 +29,7 @@ public class CardBindingStartDelegate extends AbstractCamundaDelegateSupport imp
                 string(execution, "cvv")
         );
 
-        BindCardResultResponse result = cardService.bindCard(username, request);
+        BindCardResultResponse result = cardService.persistBindingSession(username, request, bankSessionId);
 
         execution.setVariable("requires3ds", result.requires3ds());
         execution.setVariable("cardBindingSessionId", result.sessionId());

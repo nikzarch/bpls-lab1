@@ -1,6 +1,5 @@
 package com.example.labpay.camunda;
 
-import com.example.labpay.dto.request.Confirm3dsRequest;
 import com.example.labpay.dto.response.CardResponse;
 import com.example.labpay.service.CardService;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
@@ -19,12 +18,9 @@ public class CardBindingConfirmDelegate extends AbstractCamundaDelegateSupport i
     @Override
     public void execute(DelegateExecution execution) {
         String username = string(execution, "username");
-        Confirm3dsRequest request = new Confirm3dsRequest(
-                string(execution, "cardBindingSessionId"),
-                string(execution, "cardBindingConfirmationCode")
-        );
+        String sessionId = string(execution, "cardBindingSessionId");
 
-        CardResponse card = cardService.confirm3ds(username, request);
+        CardResponse card = cardService.persistConfirmedCard(username, sessionId);
         execution.setVariable("cardId", card.id());
         execution.setVariable("cardToken", card.token());
         execution.setVariable("cardMaskedCardNumber", card.maskedCardNumber());
