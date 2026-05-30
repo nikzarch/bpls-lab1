@@ -97,8 +97,14 @@ public class PaymentServiceImpl implements PaymentService {
         if (!order.getBuyerId().equals(buyer.getId())) {
             throw new BusinessException("Order does not belong to user");
         }
+
+        if (order.getStatus() == OrderStatus.PAID) {
+            log.info("Order {} already paid, returning existing result", order.getId());
+            return toResponse(order);
+        }
+
         if (order.getStatus() != OrderStatus.CREATED) {
-            throw new BusinessException("Order already processed");
+            throw new BusinessException("Order cannot be processed because status is " + order.getStatus());
         }
 
         return switch (request.method()) {
