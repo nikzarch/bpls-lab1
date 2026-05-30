@@ -25,6 +25,11 @@ public class PaymentCreateDelegate extends AbstractCamundaDelegateSupport implem
         );
 
         PaymentOrderResponse order = paymentService.createOrder(username, request);
+
+        // orderId нужен объединённому payment-process: после создания заказа
+        // следующий service task paymentProcessDelegate читает именно переменную orderId.
+        execution.setVariable("orderId", order.id());
+
         execution.setVariable("paymentOrderId", order.id());
         execution.setVariable("paymentExternalOrderId", order.externalOrderId());
         execution.setVariable("paymentStatus", order.status().name());

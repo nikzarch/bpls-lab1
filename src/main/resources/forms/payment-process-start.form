@@ -9,10 +9,19 @@
       "validate": { "required": true }
     },
     {
-      "label": "ID заказа",
+      "label": "ID существующего заказа (если заказ уже создан)",
       "type": "number",
-      "key": "orderId",
-      "validate": { "required": true }
+      "key": "orderId"
+    },
+    {
+      "label": "ID виджета (если нужно создать заказ)",
+      "type": "number",
+      "key": "widgetId"
+    },
+    {
+      "label": "ID товара (если нужно создать заказ)",
+      "type": "number",
+      "key": "productId"
     },
     {
       "label": "Способ оплаты",
@@ -25,7 +34,7 @@
       "validate": { "required": true }
     },
     {
-      "label": "Токен карты",
+      "label": "Токен карты (если карта уже привязана)",
       "type": "textfield",
       "key": "cardToken"
     }

@@ -35,6 +35,7 @@ public class PaymentDelegate {
                 new ProcessPaymentRequest(created.id(), method, cardToken)
         );
 
+        execution.setVariable("orderId", processed.id());
         execution.setVariable("paymentOrderId", processed.id());
         execution.setVariable("paymentExternalOrderId", processed.externalOrderId());
         execution.setVariable("paymentStatus", processed.status().name());
