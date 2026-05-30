@@ -9,17 +9,11 @@ public class CamundaConfig implements CamundaProcessEngineConfiguration {
 
     @Override
     public void preInit(ProcessEngineConfigurationImpl configuration) {
-
         configuration.setHistory("full");
-
         configuration.setDatabaseSchemaUpdate("true");
-
         configuration.setJobExecutorActivate(true);
-
-        configuration.setAuthorizationEnabled(true);
-
+        configuration.setAuthorizationEnabled(false);
         configuration.setDefaultNumberOfRetries(3);
-
         configuration.setInitializeTelemetry(false);
     }
 }

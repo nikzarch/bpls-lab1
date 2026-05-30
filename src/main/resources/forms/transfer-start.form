@@ -1,0 +1,54 @@
+{
+  "type": "default",
+  "id": "transfer-start",
+  "components": [
+    {
+      "label": "Username",
+      "type": "textfield",
+      "key": "username",
+      "validate": { "required": true }
+    },
+    {
+      "label": "ID получателя",
+      "type": "number",
+      "key": "recipientId",
+      "validate": { "required": true }
+    },
+    {
+      "label": "Сумма",
+      "type": "number",
+      "key": "amount",
+      "validate": { "required": true }
+    },
+    {
+      "label": "Источник",
+      "type": "select",
+      "key": "source",
+      "values": [
+        { "label": "Кошелёк", "value": "WALLET" },
+        { "label": "Карта", "value": "CARD" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "label": "Тип",
+      "type": "select",
+      "key": "type",
+      "values": [
+        { "label": "Пользователю", "value": "USER_TO_USER" },
+        { "label": "Сообществу", "value": "USER_TO_COMMUNITY" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "label": "Токен карты",
+      "type": "textfield",
+      "key": "cardToken"
+    },
+    {
+      "label": "Ключ идемпотентности",
+      "type": "textfield",
+      "key": "idempotencyKey"
+    }
+  ]
+}

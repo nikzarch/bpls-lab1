@@ -1,35 +1,38 @@
 package com.example.labpay.camunda;
 
-import com.example.labpay.batch.BatchJobRunner;
+import com.example.labpay.batch.BatchJobStartService;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
 import org.springframework.stereotype.Component;
 
 @Component("maintenanceDelegate")
 public class MaintenanceDelegate {
 
-    private final BatchJobRunner batchJobRunner;
+    private final BatchJobStartService batchJobStartService;
 
-    public MaintenanceDelegate(BatchJobRunner batchJobRunner) {
-        this.batchJobRunner = batchJobRunner;
+    public MaintenanceDelegate(BatchJobStartService batchJobStartService) {
+        this.batchJobStartService = batchJobStartService;
     }
 
-    public void runBankReconciliation(DelegateExecution execution) throws Exception {
-        launch("bankReconciliationJob", "camunda-timer");
+    public void runBankReconciliation(DelegateExecution execution) {
+        launch(execution, "bankReconciliationJob");
     }
 
-    public void runHoldExpiration(DelegateExecution execution) throws Exception {
-        launch("holdExpirationJob", "camunda-timer");
+    public void runHoldExpiration(DelegateExecution execution) {
+        launch(execution, "holdExpirationJob");
     }
 
-    public void runCardSessionCleanup(DelegateExecution execution) throws Exception {
-        launch("cardSessionCleanupJob", "camunda-timer");
+    public void runCardSessionCleanup(DelegateExecution execution) {
+        launch(execution, "cardSessionCleanupJob");
     }
 
-    public void runStuckTransfer(DelegateExecution execution) throws Exception {
-        launch("stuckTransferJob", "camunda-timer");
+    public void runStuckTransfer(DelegateExecution execution) {
+        launch(execution, "stuckTransferJob");
     }
 
-    private void launch(String jobName, String trigger) throws Exception {
-        batchJobRunner.run(jobName, trigger);
+    private void launch(DelegateExecution execution, String jobName) {
+        Object trigger = execution.getVariable("trigger");
+        batchJobStartService.startAsync(jobName, trigger == null ? "camunda-timer" : String.valueOf(trigger));
+        execution.setVariable("batchJobName", jobName);
+        execution.setVariable("batchStartMode", "async");
     }
 }

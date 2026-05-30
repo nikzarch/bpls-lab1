@@ -9,52 +9,67 @@ group = 'com.example'
 version = '0.0.1-SNAPSHOT'
 
 java {
-	toolchain {
-		languageVersion = JavaLanguageVersion.of(21)
-	}
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
 }
 
 configurations {
-	compileOnly {
-		extendsFrom annotationProcessor
-	}
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
 }
 
 repositories {
-	mavenCentral()
+    mavenCentral()
 }
-ext { camundaVersion = '7.21.0' }
+
+ext {
+    camundaVersion = '7.21.0'
+}
 
 dependencies {
-	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-	implementation 'org.springframework.boot:spring-boot-starter-security'
-	implementation 'org.springframework.boot:spring-boot-starter-web'
-	implementation 'org.springframework.boot:spring-boot-starter-validation'
-	implementation 'org.springframework.boot:spring-boot-starter-batch'
-	implementation 'org.springframework:spring-jms'
-	implementation 'org.apache.qpid:qpid-jms-client:2.10.0'
-	implementation 'jakarta.resource:jakarta.resource-api:2.1.0'
-	implementation 'jakarta.transaction:jakarta.transaction-api:2.0.1'
-	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
-	implementation 'com.atomikos:transactions-spring-boot3-starter:6.0.0'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-batch'
+    implementation 'org.springframework:spring-jms'
+    implementation 'org.apache.qpid:qpid-jms-client:2.10.0'
+    implementation 'jakarta.resource:jakarta.resource-api:2.1.0'
+    implementation 'jakarta.transaction:jakarta.transaction-api:2.0.1'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+    implementation 'com.atomikos:transactions-spring-boot3-starter:6.0.0'
 
-	implementation 'jakarta.xml.bind:jakarta.xml.bind-api:4.0.5'
-	implementation 'org.glassfish.jaxb:jaxb-runtime:4.0.7'
-	implementation "org.camunda.bpm.springboot:camunda-bpm-spring-boot-starter-webapp:${camundaVersion}"
-	implementation "org.camunda.bpm.springboot:camunda-bpm-spring-boot-starter-rest:${camundaVersion}"
-	implementation "org.camunda.bpm:camunda-engine-plugin-spin:${camundaVersion}"
-	compileOnly 'org.projectlombok:lombok'
-	annotationProcessor 'org.projectlombok:lombok'
+    implementation 'jakarta.xml.bind:jakarta.xml.bind-api:4.0.5'
+    implementation 'org.glassfish.jaxb:jaxb-runtime:4.0.7'
+    implementation "org.camunda.bpm.springboot:camunda-bpm-spring-boot-starter-webapp:${camundaVersion}"
+    implementation "org.camunda.bpm.springboot:camunda-bpm-spring-boot-starter-rest:${camundaVersion}"
+    implementation "org.camunda.bpm:camunda-engine-plugin-spin:${camundaVersion}"
 
-	implementation 'io.jsonwebtoken:jjwt-api:0.12.7'
-	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.7'
-	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.7'
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
 
-	runtimeOnly 'org.postgresql:postgresql'
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.7'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.7'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.7'
+
+    runtimeOnly 'org.postgresql:postgresql'
+
+    providedRuntime 'org.springframework.boot:spring-boot-starter-tomcat'
 }
 
 tasks.named('test') {
-	useJUnitPlatform()
+    useJUnitPlatform()
+}
+
+tasks.named('bootJar') {
+    enabled = false
+}
+
+tasks.named('bootWar') {
+    enabled = true
+    archiveFileName = 'labpay.war'
 }
 
 task bankRar(type: Jar) {

@@ -1,0 +1,36 @@
+{
+  "type": "default",
+  "id": "card-binding-start",
+  "components": [
+    {
+      "label": "Username",
+      "type": "textfield",
+      "key": "username",
+      "validate": { "required": true }
+    },
+    {
+      "label": "Номер карты",
+      "type": "textfield",
+      "key": "cardNumber",
+      "validate": { "required": true }
+    },
+    {
+      "label": "Имя держателя",
+      "type": "textfield",
+      "key": "holderName",
+      "validate": { "required": true }
+    },
+    {
+      "label": "Срок действия (MM/YY)",
+      "type": "textfield",
+      "key": "expiryDate",
+      "validate": { "required": true }
+    },
+    {
+      "label": "CVV",
+      "type": "textfield",
+      "key": "cvv",
+      "validate": { "required": true }
+    }
+  ]
+}

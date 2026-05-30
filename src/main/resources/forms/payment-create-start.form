@@ -1,0 +1,24 @@
+{
+  "type": "default",
+  "id": "payment-create-start",
+  "components": [
+    {
+      "label": "Username",
+      "type": "textfield",
+      "key": "username",
+      "validate": { "required": true }
+    },
+    {
+      "label": "ID виджета",
+      "type": "number",
+      "key": "widgetId",
+      "validate": { "required": true }
+    },
+    {
+      "label": "ID товара",
+      "type": "number",
+      "key": "productId",
+      "validate": { "required": true }
+    }
+  ]
+}

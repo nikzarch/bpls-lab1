@@ -26,7 +26,12 @@ spring:
     pub-sub-domain: false
   datasource:
     xa:
-      max-pool-size: 25
+      min-pool-size: 3
+      max-pool-size: 30
+      borrow-connection-timeout: 60
+      reap-timeout: 0
+      max-idle-time: 60
+      maintenance-interval: 60
       data-source-class-name: org.postgresql.xa.PGXADataSource
       properties:
         serverName: localhost
@@ -58,7 +63,7 @@ app:
     receive-timeout-ms: 5000
     connect-timeout-ms: 2000
   jms:
-    url: amqp://localhost:5672
+    url: ${APP_JMS_URL:amqp://localhost:5672}
   jwt:
     secret: "nobodygonnastealmyjwtsecretisnthe1234567"
     expiration-ms: 3600000
@@ -77,7 +82,7 @@ app:
     responsible-user-id: 1
     timeout-ms: 10000
   batch:
-    chunk-size: 200
+    chunk-size: 100
     bank-reconciliation:
       cron: "0 */1 * * * *"
       max-attempts: 30
@@ -95,16 +100,20 @@ camunda:
       id: admin
       password: admin
       firstName: Admin
-
     filter:
       create: All tasks
-
     auto-deployment-enabled: true
-
+    deployment-resource-pattern:
+      - classpath*:**/*.bpmn
+      - classpath*:**/*.form
     history-level: full
-
     authorization:
       enabled: false
-
     job-execution:
       enabled: true
+      core-pool-size: 2
+      max-pool-size: 4
+      queue-size: 16
+      max-jobs-per-acquisition: 2
+      wait-time-in-millis: 5000
+      lock-time-in-millis: 300000

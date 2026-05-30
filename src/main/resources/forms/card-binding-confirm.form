@@ -1,0 +1,12 @@
+{
+  "type": "default",
+  "id": "card-binding-confirm",
+  "components": [
+    {
+      "label": "3DS код",
+      "type": "textfield",
+      "key": "cardBindingConfirmationCode",
+      "validate": { "required": true }
+    }
+  ]
+}

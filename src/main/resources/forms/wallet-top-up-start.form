@@ -1,0 +1,24 @@
+{
+  "type": "default",
+  "id": "wallet-top-up-start",
+  "components": [
+    {
+      "label": "Username",
+      "type": "textfield",
+      "key": "username",
+      "validate": { "required": true }
+    },
+    {
+      "label": "Токен карты",
+      "type": "textfield",
+      "key": "cardToken",
+      "validate": { "required": true }
+    },
+    {
+      "label": "Сумма",
+      "type": "number",
+      "key": "amount",
+      "validate": { "required": true }
+    }
+  ]
+}

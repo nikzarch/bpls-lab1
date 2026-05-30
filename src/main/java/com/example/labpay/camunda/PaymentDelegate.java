@@ -2,7 +2,6 @@ package com.example.labpay.camunda;
 
 import com.example.labpay.dto.request.CreatePaymentRequest;
 import com.example.labpay.dto.request.ProcessPaymentRequest;
-import com.example.labpay.dto.request.StartPaymentProcessRequest;
 import com.example.labpay.dto.response.PaymentOrderResponse;
 import com.example.labpay.service.PaymentService;
 import org.camunda.bpm.engine.delegate.DelegateExecution;
@@ -19,21 +18,21 @@ public class PaymentDelegate {
 
     public void createAndProcess(DelegateExecution execution) {
         String username = value(execution, "username");
-        StartPaymentProcessRequest start = new StartPaymentProcessRequest(
-                longValue(execution, "widgetId"),
-                longValue(execution, "productId"),
-                enumValue(execution, "method", ProcessPaymentRequest.PaymentMethod.class),
-                value(execution, "cardToken")
-        );
+
+        long widgetId = longValue(execution, "widgetId");
+        long productId = longValue(execution, "productId");
+        ProcessPaymentRequest.PaymentMethod method =
+                enumValue(execution, "method", ProcessPaymentRequest.PaymentMethod.class);
+        String cardToken = value(execution, "cardToken");
 
         PaymentOrderResponse created = paymentService.createOrder(
                 username,
-                new CreatePaymentRequest(start.widgetId(), start.productId())
+                new CreatePaymentRequest(widgetId, productId)
         );
 
         PaymentOrderResponse processed = paymentService.processPayment(
                 username,
-                new ProcessPaymentRequest(created.id(), start.method(), start.cardToken())
+                new ProcessPaymentRequest(created.id(), method, cardToken)
         );
 
         execution.setVariable("paymentOrderId", processed.id());
@@ -41,6 +40,8 @@ public class PaymentDelegate {
         execution.setVariable("paymentStatus", processed.status().name());
         execution.setVariable("paymentAmount", processed.amount().toPlainString());
         execution.setVariable("paymentProductTitle", processed.productTitle());
+        execution.setVariable("paymentCreatedAt", processed.createdAt() == null ? null : processed.createdAt().toString());
+        execution.setVariable("paymentPaidAt", processed.paidAt() == null ? null : processed.paidAt().toString());
     }
 
     private String value(DelegateExecution execution, String key) {
@@ -50,7 +51,9 @@ public class PaymentDelegate {
 
     private long longValue(DelegateExecution execution, String key) {
         Object v = execution.getVariable(key);
-        if (v instanceof Number n) return n.longValue();
+        if (v instanceof Number n) {
+            return n.longValue();
+        }
         return Long.parseLong(String.valueOf(v));
     }
 

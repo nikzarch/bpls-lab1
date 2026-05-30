@@ -1,0 +1,33 @@
+{
+  "type": "default",
+  "id": "payment-process-start",
+  "components": [
+    {
+      "label": "Username",
+      "type": "textfield",
+      "key": "username",
+      "validate": { "required": true }
+    },
+    {
+      "label": "ID заказа",
+      "type": "number",
+      "key": "orderId",
+      "validate": { "required": true }
+    },
+    {
+      "label": "Способ оплаты",
+      "type": "select",
+      "key": "method",
+      "values": [
+        { "label": "Кошелёк", "value": "WALLET" },
+        { "label": "Карта", "value": "CARD" }
+      ],
+      "validate": { "required": true }
+    },
+    {
+      "label": "Токен карты",
+      "type": "textfield",
+      "key": "cardToken"
+    }
+  ]
+}

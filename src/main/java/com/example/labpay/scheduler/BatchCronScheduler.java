@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 
 @Slf4j
 @Service
-@Profile({"worker", "all"})
+@Profile("spring-scheduler")
 @RequiredArgsConstructor
 public class BatchCronScheduler {
 
@@ -32,7 +32,7 @@ public class BatchCronScheduler {
 
     private void launch(String jobName) {
         try {
-            var execution = batchJobRunner.run(jobName, "scheduled");
+            var execution = batchJobRunner.run(jobName, "spring-scheduler");
             log.info("{} executionId={} status={}", jobName, execution.getId(), execution.getStatus());
         } catch (Exception e) {
             log.error("{} failed to launch: {}", jobName, e.getMessage(), e);

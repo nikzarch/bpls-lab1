@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 
 @Slf4j
 @Service
-@Profile({"worker", "all"})
+@Profile("spring-scheduler")
 @RequiredArgsConstructor
 public class CardSessionCleanupScheduler {
 
@@ -18,7 +18,7 @@ public class CardSessionCleanupScheduler {
     @Scheduled(cron = "${app.batch.card-session-cleanup.cron}")
     public void cleanupAutomatically() {
         try {
-            var execution = batchJobRunner.run("cardSessionCleanupJob", "scheduled");
+            var execution = batchJobRunner.run("cardSessionCleanupJob", "spring-scheduler");
             log.info("cardSessionCleanupJob executionId={} status={}",
                     execution.getId(), execution.getStatus());
         } catch (Exception e) {
