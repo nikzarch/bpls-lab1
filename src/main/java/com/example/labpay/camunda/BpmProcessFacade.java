@@ -8,6 +8,7 @@ import com.example.labpay.domain.transfer.TransferType;
 import com.example.labpay.dto.request.*;
 import com.example.labpay.dto.response.*;
 import com.example.labpay.exception.NotFoundException;
+import com.example.labpay.service.CardService;
 import org.camunda.bpm.engine.HistoryService;
 import org.camunda.bpm.engine.RuntimeService;
 import org.camunda.bpm.engine.TaskService;
@@ -18,10 +19,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 
 @Service
 public class BpmProcessFacade {
@@ -36,11 +34,14 @@ public class BpmProcessFacade {
     private final RuntimeService runtimeService;
     private final TaskService taskService;
     private final HistoryService historyService;
+    private final CardService cardService;
 
-    public BpmProcessFacade(RuntimeService runtimeService, TaskService taskService, HistoryService historyService) {
+    public BpmProcessFacade(RuntimeService runtimeService, TaskService taskService,
+                            HistoryService historyService, CardService cardService) {
         this.runtimeService = runtimeService;
         this.taskService = taskService;
         this.historyService = historyService;
+        this.cardService = cardService;
     }
 
     public ProcessLaunchResult start(String processKey, Map<String, Object> variables) {
@@ -61,14 +62,27 @@ public class BpmProcessFacade {
     }
 
     public BindCardResultResponse startCardBinding(String username, BindCardRequest request) {
-        ProcessLaunchResult result = start(CARD_BINDING_PROCESS, Map.of(
-                "username", username,
-                "cardNumber", request.cardNumber(),
-                "holderName", request.holderName(),
-                "expiryDate", request.expiryDate(),
-                "cvv", request.cvv()
-        ));
-        return toBindCard(result.variables().orElse(Map.of()));
+        BindCardResultResponse bankResult = cardService.bindCard(username, request);
+
+        Map<String, Object> vars = new HashMap<>();
+        vars.put("username", username);
+        vars.put("cardNumber", request.cardNumber());
+        vars.put("holderName", request.holderName());
+        vars.put("expiryDate", request.expiryDate());
+        vars.put("cvv", request.cvv());
+        vars.put("requires3ds", bankResult.requires3ds());
+        vars.put("cardBindingSessionId", bankResult.sessionId());
+        vars.put("cardBindingConfirmationCode", bankResult.confirmationCode());
+        if (bankResult.card() != null) {
+            vars.put("cardId", bankResult.card().id());
+            vars.put("cardToken", bankResult.card().token());
+            vars.put("cardMaskedCardNumber", bankResult.card().maskedCardNumber());
+            vars.put("cardHolderName", bankResult.card().holderName());
+            vars.put("cardStatus", bankResult.card().status().name());
+        }
+
+        start(CARD_BINDING_PROCESS, vars);
+        return bankResult;
     }
 
     public CardResponse completeCardBinding3ds(String sessionId, String code) {
