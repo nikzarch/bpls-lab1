@@ -1,0 +1,81 @@
+<?xml version='1.0' encoding='utf-8'?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_Labpay" targetNamespace="http://labpay.example.com/bpmn">
+  <bpmn:process id="transfer-process" name="Перевод" isExecutable="true" camunda:historyTimeToLive="30">
+    <bpmn:startEvent id="transfer-process-start" name="Параметры перевода" camunda:formRef="transfer-start" camunda:formRefBinding="deployment">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="start" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:outgoing>tr_flow_1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="transfer-task" name="Выполнить перевод" camunda:delegateExpression="${transferDelegate}">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="start" delegateExpression="${camundaProcessStateListener}" />
+        <camunda:executionListener event="end" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>tr_flow_1</bpmn:incoming>
+      <bpmn:outgoing>tr_flow_2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="transfer-status-gateway" name="Перевод успешен?">
+      <bpmn:incoming>tr_flow_2</bpmn:incoming>
+      <bpmn:outgoing>tr_flow_success</bpmn:outgoing>
+      <bpmn:outgoing>tr_flow_failed</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:endEvent id="transfer-process-end" name="Перевод завершён">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="end" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>tr_flow_success</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="transfer-process-end-failed" name="Перевод не завершён">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="end" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>tr_flow_failed</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="tr_flow_1" sourceRef="transfer-process-start" targetRef="transfer-task" />
+    <bpmn:sequenceFlow id="tr_flow_2" sourceRef="transfer-task" targetRef="transfer-status-gateway" />
+    <bpmn:sequenceFlow id="tr_flow_success" name="SUCCESS" sourceRef="transfer-status-gateway" targetRef="transfer-process-end">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${transferStatus == 'SUCCESS'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="tr_flow_failed" name="Не SUCCESS" sourceRef="transfer-status-gateway" targetRef="transfer-process-end-failed">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${transferStatus != 'SUCCESS'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Transfer">
+    <bpmndi:BPMNPlane id="BPMNPlane_Transfer" bpmnElement="transfer-process">
+      <bpmndi:BPMNShape id="transfer-process-start_di" bpmnElement="transfer-process-start">
+        <dc:Bounds x="120" y="120" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="transfer-task_di" bpmnElement="transfer-task">
+        <dc:Bounds x="230" y="98" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="transfer-status-gateway_di" bpmnElement="transfer-status-gateway" isMarkerVisible="true">
+        <dc:Bounds x="450" y="113" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="transfer-process-end_di" bpmnElement="transfer-process-end">
+        <dc:Bounds x="590" y="75" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="transfer-process-end-failed_di" bpmnElement="transfer-process-end-failed">
+        <dc:Bounds x="590" y="165" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="tr_flow_1_di" bpmnElement="tr_flow_1">
+        <di:waypoint x="156" y="138" />
+        <di:waypoint x="230" y="138" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="tr_flow_2_di" bpmnElement="tr_flow_2">
+        <di:waypoint x="380" y="138" />
+        <di:waypoint x="450" y="138" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="tr_flow_success_di" bpmnElement="tr_flow_success">
+        <di:waypoint x="475" y="113" />
+        <di:waypoint x="475" y="93" />
+        <di:waypoint x="590" y="93" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="tr_flow_failed_di" bpmnElement="tr_flow_failed">
+        <di:waypoint x="475" y="163" />
+        <di:waypoint x="475" y="183" />
+        <di:waypoint x="590" y="183" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -1,0 +1,48 @@
+<?xml version='1.0' encoding='utf-8'?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_Labpay" targetNamespace="http://labpay.example.com/bpmn">
+  <bpmn:process id="payment-create-process" name="Создание заказа оплаты" isExecutable="true" camunda:historyTimeToLive="30">
+    <bpmn:startEvent id="payment-create-process-start" name="Параметры заказа" camunda:formRef="payment-create-start" camunda:formRefBinding="deployment">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="start" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:outgoing>pc_flow_1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="payment-create-task" name="Создать заказ оплаты" camunda:delegateExpression="${paymentCreateDelegate}">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="start" delegateExpression="${camundaProcessStateListener}" />
+        <camunda:executionListener event="end" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>pc_flow_1</bpmn:incoming>
+      <bpmn:outgoing>pc_flow_2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="payment-create-process-end" name="Заказ создан">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="end" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>pc_flow_2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="pc_flow_1" sourceRef="payment-create-process-start" targetRef="payment-create-task" />
+    <bpmn:sequenceFlow id="pc_flow_2" sourceRef="payment-create-task" targetRef="payment-create-process-end" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_PaymentCreate">
+    <bpmndi:BPMNPlane id="BPMNPlane_PaymentCreate" bpmnElement="payment-create-process">
+      <bpmndi:BPMNShape id="payment-create-process-start_di" bpmnElement="payment-create-process-start">
+        <dc:Bounds x="120" y="120" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="payment-create-task_di" bpmnElement="payment-create-task">
+        <dc:Bounds x="230" y="98" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="payment-create-process-end_di" bpmnElement="payment-create-process-end">
+        <dc:Bounds x="460" y="120" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="pc_flow_1_di" bpmnElement="pc_flow_1">
+        <di:waypoint x="156" y="138" />
+        <di:waypoint x="230" y="138" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pc_flow_2_di" bpmnElement="pc_flow_2">
+        <di:waypoint x="380" y="138" />
+        <di:waypoint x="460" y="138" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

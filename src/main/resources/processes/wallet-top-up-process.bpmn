@@ -1,0 +1,48 @@
+<?xml version='1.0' encoding='utf-8'?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_Labpay" targetNamespace="http://labpay.example.com/bpmn">
+  <bpmn:process id="wallet-top-up-process" name="Пополнение кошелька" isExecutable="true" camunda:historyTimeToLive="30">
+    <bpmn:startEvent id="wallet-top-up-process-start" name="Параметры пополнения" camunda:formRef="wallet-top-up-start" camunda:formRefBinding="deployment">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="start" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:outgoing>wu_flow_1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="wallet-top-up-task" name="Выполнить пополнение" camunda:delegateExpression="${walletTopUpDelegate}">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="start" delegateExpression="${camundaProcessStateListener}" />
+        <camunda:executionListener event="end" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>wu_flow_1</bpmn:incoming>
+      <bpmn:outgoing>wu_flow_2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="wallet-top-up-process-end" name="Пополнение принято">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="end" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>wu_flow_2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="wu_flow_1" sourceRef="wallet-top-up-process-start" targetRef="wallet-top-up-task" />
+    <bpmn:sequenceFlow id="wu_flow_2" sourceRef="wallet-top-up-task" targetRef="wallet-top-up-process-end" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_WalletTopUp">
+    <bpmndi:BPMNPlane id="BPMNPlane_WalletTopUp" bpmnElement="wallet-top-up-process">
+      <bpmndi:BPMNShape id="wallet-top-up-process-start_di" bpmnElement="wallet-top-up-process-start">
+        <dc:Bounds x="120" y="120" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="wallet-top-up-task_di" bpmnElement="wallet-top-up-task">
+        <dc:Bounds x="230" y="98" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="wallet-top-up-process-end_di" bpmnElement="wallet-top-up-process-end">
+        <dc:Bounds x="460" y="120" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="wu_flow_1_di" bpmnElement="wu_flow_1">
+        <di:waypoint x="156" y="138" />
+        <di:waypoint x="230" y="138" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="wu_flow_2_di" bpmnElement="wu_flow_2">
+        <di:waypoint x="380" y="138" />
+        <di:waypoint x="460" y="138" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

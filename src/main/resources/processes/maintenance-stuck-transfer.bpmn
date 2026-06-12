@@ -1,0 +1,51 @@
+<?xml version='1.0' encoding='utf-8'?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_Labpay" targetNamespace="http://labpay.example.com/bpmn">
+  <bpmn:process id="maintenance-stuck-transfer" name="Обработка зависших переводов" isExecutable="true" camunda:historyTimeToLive="30">
+    <bpmn:startEvent id="maintenance-stuck-transfer-start" name="Каждые 10 минут">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="start" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:outgoing>mst_flow_1</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">R/PT10M</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="maintenance-stuck-transfer-task" name="Запустить обработку зависших переводов" camunda:delegateExpression="${stuckTransferDelegate}">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="start" delegateExpression="${camundaProcessStateListener}" />
+        <camunda:executionListener event="end" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>mst_flow_1</bpmn:incoming>
+      <bpmn:outgoing>mst_flow_2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="maintenance-stuck-transfer-end" name="Запуск принят">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="end" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>mst_flow_2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="mst_flow_1" sourceRef="maintenance-stuck-transfer-start" targetRef="maintenance-stuck-transfer-task" />
+    <bpmn:sequenceFlow id="mst_flow_2" sourceRef="maintenance-stuck-transfer-task" targetRef="maintenance-stuck-transfer-end" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_MaintenanceTransfer">
+    <bpmndi:BPMNPlane id="BPMNPlane_MaintenanceTransfer" bpmnElement="maintenance-stuck-transfer">
+      <bpmndi:BPMNShape id="maintenance-stuck-transfer-start_di" bpmnElement="maintenance-stuck-transfer-start">
+        <dc:Bounds x="120" y="120" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="maintenance-stuck-transfer-task_di" bpmnElement="maintenance-stuck-transfer-task">
+        <dc:Bounds x="230" y="98" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="maintenance-stuck-transfer-end_di" bpmnElement="maintenance-stuck-transfer-end">
+        <dc:Bounds x="480" y="120" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="mst_flow_1_di" bpmnElement="mst_flow_1">
+        <di:waypoint x="156" y="138" />
+        <di:waypoint x="230" y="138" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="mst_flow_2_di" bpmnElement="mst_flow_2">
+        <di:waypoint x="400" y="138" />
+        <di:waypoint x="480" y="138" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

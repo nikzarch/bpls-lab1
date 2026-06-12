@@ -1,5 +1,6 @@
 package com.example.labpay.service.impl;
 
+import com.example.labpay.camunda.identity.CamundaIdentitySyncService;
 import com.example.labpay.domain.user.Role;
 import com.example.labpay.domain.wallet.Wallet;
 import com.example.labpay.dto.request.LoginRequest;
@@ -24,13 +25,14 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
-
     @Qualifier("XmlAppUserRepository")
     private final AppUserRepository appUserRepository;
+
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
     private final WalletRepository walletRepository;
     private final TransactionManagerFacade transactionManagerFacade;
+    private final CamundaIdentitySyncService camundaIdentitySyncService;
 
     @Override
     public AuthResponse register(RegisterRequest request) {
@@ -49,7 +51,11 @@ public class AuthServiceImpl implements AuthService {
                             .role(role.toString())
                             .build());
 
-                    walletRepository.save(Wallet.builder().userId(savedUser.getId()).build());
+                    walletRepository.save(Wallet.builder()
+                            .userId(savedUser.getId())
+                            .build());
+
+                    camundaIdentitySyncService.syncRegisteredUser(savedUser, request.password(), role);
 
                     return savedUser;
                 },

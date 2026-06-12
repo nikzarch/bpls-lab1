@@ -1,8 +1,10 @@
 spring:
   application:
     name: labpay
+
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
+    open-in-view: false
     hibernate:
       ddl-auto: update
     properties:
@@ -15,6 +17,7 @@ spring:
       jakarta:
         persistence:
           transactionType: JTA
+
   jta:
     enabled: true
     atomikos:
@@ -22,39 +25,47 @@ spring:
         service: labpay
         max-timeout: 300000
         default-jta-timeout: 30000
-  jms:
-    pub-sub-domain: false
+        enable-logging: true
+
+      datasource:
+        unique-resource-name: labpayDataSource
+        min-pool-size: 5
+        max-pool-size: 60
+        borrow-connection-timeout: 60
+        reap-timeout: 30
+        max-idle-time: 60
+        maintenance-interval: 60
+        test-query: SELECT 1
+
   datasource:
     xa:
-      min-pool-size: 5
-      max-pool-size: 60
-      borrow-connection-timeout: 60
-      reap-timeout: 0
-      max-idle-time: 60
-      maintenance-interval: 60
       data-source-class-name: org.postgresql.xa.PGXADataSource
       properties:
-        serverName: localhost
-        portNumber: 5433
-        databaseName: postgres
-        user: postgres
-        password: 1
+        serverName: ${SPRING_DATASOURCE_XA_PROPERTIES_SERVERNAME:localhost}
+        portNumber: ${SPRING_DATASOURCE_XA_PROPERTIES_PORTNUMBER:5433}
+        databaseName: ${SPRING_DATASOURCE_XA_PROPERTIES_DATABASENAME:postgres}
+        user: ${SPRING_DATASOURCE_XA_PROPERTIES_USER:postgres}
+        password: ${SPRING_DATASOURCE_XA_PROPERTIES_PASSWORD:1}
+
+  jms:
+    pub-sub-domain: false
+
   batch:
     job:
       enabled: false
     jdbc:
       initialize-schema: always
-      isolation-level-for-create: READ_COMMITTED
+      isolation-level-for-create: DEFAULT
 
 springdoc:
   api-docs:
     path: /api/api-docs
 
 rabbit:
-  host: localhost
-  port: 5672
-  username: admin
-  password: admin
+  host: ${RABBIT_HOST:localhost}
+  port: ${RABBIT_PORT:5672}
+  username: ${RABBIT_USERNAME:admin}
+  password: ${RABBIT_PASSWORD:admin}
 
 app:
   bank:
@@ -62,17 +73,23 @@ app:
     reply-queue: bank.responses
     receive-timeout-ms: 5000
     connect-timeout-ms: 2000
+
   jms:
     url: ${APP_JMS_URL:amqp://localhost:5672}
+
   jwt:
     secret: "nobodygonnastealmyjwtsecretisnthe1234567"
     expiration-ms: 3600000
+
   card:
     encryption-key: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
   webhook:
     secret: "webhook-hmac-secret-key-change-me"
+
   security:
     users-xml-path: file:./users.xml
+
   bitrix:
     base-url: ${BITRIX_BASE_URL:}
     external-order-field: UF_CRM_1778872223
@@ -81,15 +98,20 @@ app:
     currency-id: RUB
     responsible-user-id: 1
     timeout-ms: 10000
+
   batch:
     chunk-size: 25
+
     bank-reconciliation:
       cron: "0 */1 * * * *"
       max-attempts: 30
+
     card-session-cleanup:
       cron: "0 */5 * * * *"
+
     hold-expiration:
       cron: "0 */1 * * * *"
+
     stuck-transfer:
       cron: "0 */10 * * * *"
       cutoff-minutes: 30
@@ -100,15 +122,21 @@ camunda:
       id: admin
       password: admin
       firstName: Admin
+
     filter:
       create: All tasks
+
     auto-deployment-enabled: true
+
     deployment-resource-pattern:
       - classpath*:**/*.bpmn
       - classpath*:**/*.form
+
     history-level: full
+
     authorization:
       enabled: false
+
     job-execution:
       enabled: true
       core-pool-size: 1
@@ -117,3 +145,12 @@ camunda:
       max-jobs-per-acquisition: 1
       wait-time-in-millis: 5000
       lock-time-in-millis: 300000
+
+logging:
+  level:
+    com.atomikos: INFO
+    com.atomikos.jdbc: DEBUG
+    com.atomikos.spring: DEBUG
+    org.springframework.transaction: INFO
+    org.hibernate.engine.transaction: INFO
+    org.camunda.bpm.engine: INFO

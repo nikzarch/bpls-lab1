@@ -1,0 +1,303 @@
+<?xml version='1.0' encoding='utf-8'?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_Labpay" targetNamespace="http://labpay.example.com/bpmn">
+  <bpmn:process id="payment-process" name="Проведение платежа" isExecutable="true" camunda:historyTimeToLive="30">
+    <bpmn:startEvent id="payment-process-start" name="Старт оплаты" camunda:formRef="payment-process-start" camunda:formRefBinding="deployment">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="start" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:outgoing>pp_flow_start_to_has_order</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:exclusiveGateway id="pp_has_order_gateway" name="Заказ уже создан?">
+      <bpmn:incoming>pp_flow_start_to_has_order</bpmn:incoming>
+      <bpmn:outgoing>pp_flow_has_order_yes</bpmn:outgoing>
+      <bpmn:outgoing>pp_flow_has_order_no</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="pp_create_order_task" name="Создать заказ оплаты" camunda:delegateExpression="${paymentCreateDelegate}">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="start" delegateExpression="${camundaProcessStateListener}" />
+        <camunda:executionListener event="end" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>pp_flow_has_order_no</bpmn:incoming>
+      <bpmn:outgoing>pp_flow_created_to_method</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="pp_method_gateway" name="Способ оплаты">
+      <bpmn:incoming>pp_flow_has_order_yes</bpmn:incoming>
+      <bpmn:incoming>pp_flow_created_to_method</bpmn:incoming>
+      <bpmn:outgoing>pp_flow_method_wallet</bpmn:outgoing>
+      <bpmn:outgoing>pp_flow_method_card</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:exclusiveGateway id="pp_card_token_gateway" name="Карта уже привязана?">
+      <bpmn:incoming>pp_flow_method_card</bpmn:incoming>
+      <bpmn:outgoing>pp_flow_card_token_yes</bpmn:outgoing>
+      <bpmn:outgoing>pp_flow_card_token_no</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="pp_enter_card_details_task" name="Ввести реквизиты карты" camunda:formRef="card-binding-start" camunda:formRefBinding="deployment" camunda:candidateGroups="CUSTOMER,ADMIN">
+      <bpmn:extensionElements>
+        <camunda:taskListener event="create" delegateExpression="${camundaProcessStateListener}" />
+        <camunda:taskListener event="complete" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>pp_flow_card_token_no</bpmn:incoming>
+      <bpmn:outgoing>pp_flow_card_details_to_bind</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="pp_bind_card_task" name="Проверить карту и создать 3DS-сессию" camunda:delegateExpression="${cardBindingStartDelegate}">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="start" delegateExpression="${camundaProcessStateListener}" />
+        <camunda:executionListener event="end" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>pp_flow_card_details_to_bind</bpmn:incoming>
+      <bpmn:outgoing>pp_flow_bind_to_requires_3ds</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="pp_requires_3ds_gateway" name="Нужен 3DS?">
+      <bpmn:incoming>pp_flow_bind_to_requires_3ds</bpmn:incoming>
+      <bpmn:outgoing>pp_flow_requires_3ds_yes</bpmn:outgoing>
+      <bpmn:outgoing>pp_flow_requires_3ds_no</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="pp_card_binding_confirm_task" name="Подтвердить 3DS" camunda:formRef="card-binding-confirm" camunda:formRefBinding="deployment" camunda:candidateGroups="CUSTOMER,ADMIN">
+      <bpmn:extensionElements>
+        <camunda:taskListener event="create" delegateExpression="${camundaProcessStateListener}" />
+        <camunda:taskListener event="complete" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>pp_flow_requires_3ds_yes</bpmn:incoming>
+      <bpmn:outgoing>pp_flow_confirm_to_finish_bind</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:boundaryEvent id="pp_card_binding_3ds_timeout" name="Таймаут 5 минут" attachedToRef="pp_card_binding_confirm_task" cancelActivity="true">
+      <bpmn:outgoing>pp_flow_3ds_timeout_to_error</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT5M</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:serviceTask id="pp_finish_card_binding_task" name="Завершить привязку карты" camunda:delegateExpression="${cardBindingConfirmDelegate}">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="start" delegateExpression="${camundaProcessStateListener}" />
+        <camunda:executionListener event="end" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>pp_flow_confirm_to_finish_bind</bpmn:incoming>
+      <bpmn:outgoing>pp_flow_finished_bind_to_process_payment</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="pp_process_payment_task" name="Провести оплату" camunda:delegateExpression="${paymentProcessDelegate}">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="start" delegateExpression="${camundaProcessStateListener}" />
+        <camunda:executionListener event="end" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>pp_flow_method_wallet</bpmn:incoming>
+      <bpmn:incoming>pp_flow_card_token_yes</bpmn:incoming>
+      <bpmn:incoming>pp_flow_requires_3ds_no</bpmn:incoming>
+      <bpmn:incoming>pp_flow_finished_bind_to_process_payment</bpmn:incoming>
+      <bpmn:outgoing>pp_flow_process_to_status</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="pp_payment_status_gateway" name="Оплачено?">
+      <bpmn:incoming>pp_flow_process_to_status</bpmn:incoming>
+      <bpmn:outgoing>pp_flow_paid</bpmn:outgoing>
+      <bpmn:outgoing>pp_flow_failed</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="pp_notify_merchant_task" name="Webhook продавцу / Bitrix CRM" camunda:expression="${true}">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="start" delegateExpression="${camundaProcessStateListener}" />
+        <camunda:executionListener event="end" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>pp_flow_paid</bpmn:incoming>
+      <bpmn:outgoing>pp_flow_notify_to_success</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="pp_success_end" name="Оплата завершена">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="end" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>pp_flow_notify_to_success</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="pp_failed_end" name="Оплата не завершена">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="end" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>pp_flow_failed</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="pp_3ds_timeout_end" name="Ошибка: 3DS timeout">
+      <bpmn:extensionElements>
+        <camunda:executionListener event="end" delegateExpression="${camundaProcessStateListener}" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>pp_flow_3ds_timeout_to_error</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="pp_flow_start_to_has_order" sourceRef="payment-process-start" targetRef="pp_has_order_gateway" />
+    <bpmn:sequenceFlow id="pp_flow_has_order_yes" name="Да" sourceRef="pp_has_order_gateway" targetRef="pp_method_gateway">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${orderId != null}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="pp_flow_has_order_no" name="Нет" sourceRef="pp_has_order_gateway" targetRef="pp_create_order_task">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${orderId == null}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="pp_flow_created_to_method" sourceRef="pp_create_order_task" targetRef="pp_method_gateway" />
+    <bpmn:sequenceFlow id="pp_flow_method_wallet" name="Кошелёк" sourceRef="pp_method_gateway" targetRef="pp_process_payment_task">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${method != 'CARD'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="pp_flow_method_card" name="Карта" sourceRef="pp_method_gateway" targetRef="pp_card_token_gateway">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${method == 'CARD'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="pp_flow_card_token_yes" name="Да" sourceRef="pp_card_token_gateway" targetRef="pp_process_payment_task">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${cardToken != null and cardToken != ''}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="pp_flow_card_token_no" name="Нет" sourceRef="pp_card_token_gateway" targetRef="pp_enter_card_details_task">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${cardToken == null or cardToken == ''}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="pp_flow_card_details_to_bind" sourceRef="pp_enter_card_details_task" targetRef="pp_bind_card_task" />
+    <bpmn:sequenceFlow id="pp_flow_bind_to_requires_3ds" sourceRef="pp_bind_card_task" targetRef="pp_requires_3ds_gateway" />
+    <bpmn:sequenceFlow id="pp_flow_requires_3ds_yes" name="Да" sourceRef="pp_requires_3ds_gateway" targetRef="pp_card_binding_confirm_task">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${requires3ds == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="pp_flow_requires_3ds_no" name="Нет" sourceRef="pp_requires_3ds_gateway" targetRef="pp_process_payment_task">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${requires3ds == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="pp_flow_confirm_to_finish_bind" sourceRef="pp_card_binding_confirm_task" targetRef="pp_finish_card_binding_task" />
+    <bpmn:sequenceFlow id="pp_flow_finished_bind_to_process_payment" sourceRef="pp_finish_card_binding_task" targetRef="pp_process_payment_task" />
+    <bpmn:sequenceFlow id="pp_flow_process_to_status" sourceRef="pp_process_payment_task" targetRef="pp_payment_status_gateway" />
+    <bpmn:sequenceFlow id="pp_flow_paid" name="PAID" sourceRef="pp_payment_status_gateway" targetRef="pp_notify_merchant_task">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${paymentStatus == 'PAID'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="pp_flow_failed" name="Не PAID" sourceRef="pp_payment_status_gateway" targetRef="pp_failed_end">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${paymentStatus != 'PAID'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="pp_flow_notify_to_success" sourceRef="pp_notify_merchant_task" targetRef="pp_success_end" />
+    <bpmn:sequenceFlow id="pp_flow_3ds_timeout_to_error" sourceRef="pp_card_binding_3ds_timeout" targetRef="pp_3ds_timeout_end" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_PaymentProcess">
+    <bpmndi:BPMNPlane id="BPMNPlane_PaymentProcess" bpmnElement="payment-process">
+      <bpmndi:BPMNShape id="payment-process-start_di" bpmnElement="payment-process-start">
+        <dc:Bounds x="120" y="202" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pp_has_order_gateway_di" bpmnElement="pp_has_order_gateway" isMarkerVisible="true">
+        <dc:Bounds x="210" y="195" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pp_create_order_task_di" bpmnElement="pp_create_order_task">
+        <dc:Bounds x="300" y="90" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pp_method_gateway_di" bpmnElement="pp_method_gateway" isMarkerVisible="true">
+        <dc:Bounds x="520" y="195" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pp_card_token_gateway_di" bpmnElement="pp_card_token_gateway" isMarkerVisible="true">
+        <dc:Bounds x="650" y="105" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pp_enter_card_details_task_di" bpmnElement="pp_enter_card_details_task">
+        <dc:Bounds x="760" y="90" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pp_bind_card_task_di" bpmnElement="pp_bind_card_task">
+        <dc:Bounds x="970" y="90" width="190" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pp_requires_3ds_gateway_di" bpmnElement="pp_requires_3ds_gateway" isMarkerVisible="true">
+        <dc:Bounds x="1220" y="105" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pp_card_binding_confirm_task_di" bpmnElement="pp_card_binding_confirm_task">
+        <dc:Bounds x="1330" y="90" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pp_card_binding_3ds_timeout_di" bpmnElement="pp_card_binding_3ds_timeout">
+        <dc:Bounds x="1415" y="152" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pp_finish_card_binding_task_di" bpmnElement="pp_finish_card_binding_task">
+        <dc:Bounds x="1540" y="90" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pp_process_payment_task_di" bpmnElement="pp_process_payment_task">
+        <dc:Bounds x="1810" y="180" width="150" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pp_payment_status_gateway_di" bpmnElement="pp_payment_status_gateway" isMarkerVisible="true">
+        <dc:Bounds x="2030" y="195" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pp_notify_merchant_task_di" bpmnElement="pp_notify_merchant_task">
+        <dc:Bounds x="2140" y="110" width="170" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pp_success_end_di" bpmnElement="pp_success_end">
+        <dc:Bounds x="2380" y="132" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pp_failed_end_di" bpmnElement="pp_failed_end">
+        <dc:Bounds x="2210" y="282" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="pp_3ds_timeout_end_di" bpmnElement="pp_3ds_timeout_end">
+        <dc:Bounds x="1542" y="282" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="pp_flow_start_to_has_order_di" bpmnElement="pp_flow_start_to_has_order">
+        <di:waypoint x="156" y="220" />
+        <di:waypoint x="210" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pp_flow_has_order_yes_di" bpmnElement="pp_flow_has_order_yes">
+        <di:waypoint x="260" y="220" />
+        <di:waypoint x="520" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pp_flow_has_order_no_di" bpmnElement="pp_flow_has_order_no">
+        <di:waypoint x="235" y="195" />
+        <di:waypoint x="235" y="130" />
+        <di:waypoint x="300" y="130" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pp_flow_created_to_method_di" bpmnElement="pp_flow_created_to_method">
+        <di:waypoint x="450" y="130" />
+        <di:waypoint x="545" y="130" />
+        <di:waypoint x="545" y="195" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pp_flow_method_wallet_di" bpmnElement="pp_flow_method_wallet">
+        <di:waypoint x="545" y="245" />
+        <di:waypoint x="545" y="330" />
+        <di:waypoint x="1885" y="330" />
+        <di:waypoint x="1885" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pp_flow_method_card_di" bpmnElement="pp_flow_method_card">
+        <di:waypoint x="570" y="220" />
+        <di:waypoint x="600" y="220" />
+        <di:waypoint x="600" y="130" />
+        <di:waypoint x="650" y="130" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pp_flow_card_token_yes_di" bpmnElement="pp_flow_card_token_yes">
+        <di:waypoint x="675" y="155" />
+        <di:waypoint x="675" y="220" />
+        <di:waypoint x="1810" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pp_flow_card_token_no_di" bpmnElement="pp_flow_card_token_no">
+        <di:waypoint x="700" y="130" />
+        <di:waypoint x="760" y="130" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pp_flow_card_details_to_bind_di" bpmnElement="pp_flow_card_details_to_bind">
+        <di:waypoint x="910" y="130" />
+        <di:waypoint x="970" y="130" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pp_flow_bind_to_requires_3ds_di" bpmnElement="pp_flow_bind_to_requires_3ds">
+        <di:waypoint x="1160" y="130" />
+        <di:waypoint x="1220" y="130" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pp_flow_requires_3ds_yes_di" bpmnElement="pp_flow_requires_3ds_yes">
+        <di:waypoint x="1270" y="130" />
+        <di:waypoint x="1330" y="130" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pp_flow_requires_3ds_no_di" bpmnElement="pp_flow_requires_3ds_no">
+        <di:waypoint x="1245" y="155" />
+        <di:waypoint x="1245" y="220" />
+        <di:waypoint x="1810" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pp_flow_confirm_to_finish_bind_di" bpmnElement="pp_flow_confirm_to_finish_bind">
+        <di:waypoint x="1480" y="130" />
+        <di:waypoint x="1540" y="130" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pp_flow_finished_bind_to_process_payment_di" bpmnElement="pp_flow_finished_bind_to_process_payment">
+        <di:waypoint x="1710" y="130" />
+        <di:waypoint x="1760" y="130" />
+        <di:waypoint x="1760" y="220" />
+        <di:waypoint x="1810" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pp_flow_process_to_status_di" bpmnElement="pp_flow_process_to_status">
+        <di:waypoint x="1960" y="220" />
+        <di:waypoint x="2030" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pp_flow_paid_di" bpmnElement="pp_flow_paid">
+        <di:waypoint x="2055" y="195" />
+        <di:waypoint x="2055" y="150" />
+        <di:waypoint x="2140" y="150" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pp_flow_failed_di" bpmnElement="pp_flow_failed">
+        <di:waypoint x="2055" y="245" />
+        <di:waypoint x="2055" y="300" />
+        <di:waypoint x="2210" y="300" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pp_flow_notify_to_success_di" bpmnElement="pp_flow_notify_to_success">
+        <di:waypoint x="2310" y="150" />
+        <di:waypoint x="2380" y="150" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="pp_flow_3ds_timeout_to_error_di" bpmnElement="pp_flow_3ds_timeout_to_error">
+        <di:waypoint x="1433" y="188" />
+        <di:waypoint x="1433" y="300" />
+        <di:waypoint x="1542" y="300" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
