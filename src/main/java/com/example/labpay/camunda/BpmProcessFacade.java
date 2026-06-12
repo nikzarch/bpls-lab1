@@ -14,15 +14,19 @@ import org.camunda.bpm.engine.TaskService;
 import org.camunda.bpm.engine.history.HistoricVariableInstance;
 import org.camunda.bpm.engine.runtime.ProcessInstance;
 import org.camunda.bpm.engine.task.Task;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 public class BpmProcessFacade {
@@ -37,19 +41,24 @@ public class BpmProcessFacade {
     private final RuntimeService runtimeService;
     private final TaskService taskService;
     private final HistoryService historyService;
+    private final ProcessStartAuthorizer processStartAuthorizer;
     private final CardService cardService;
 
     public BpmProcessFacade(RuntimeService runtimeService,
                             TaskService taskService,
                             HistoryService historyService,
+                            ProcessStartAuthorizer processStartAuthorizer,
                             CardService cardService) {
         this.runtimeService = runtimeService;
         this.taskService = taskService;
         this.historyService = historyService;
+        this.processStartAuthorizer = processStartAuthorizer;
         this.cardService = cardService;
     }
 
     public ProcessLaunchResult start(String processKey, Map<String, Object> variables) {
+        processStartAuthorizer.assertCanStart(processKey, currentUserGroups());
+
         ProcessInstance instance = runtimeService.startProcessInstanceByKey(processKey, variables);
         Task task = taskService.createTaskQuery()
                 .processInstanceId(instance.getId())
@@ -64,6 +73,22 @@ public class BpmProcessFacade {
                 task != null ? task.getName() : null,
                 Optional.of(snapshotVariables(instance.getId()))
         );
+    }
+
+    public Set<String> currentUserGroups() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        Set<String> groups = new LinkedHashSet<>();
+        if (auth == null) {
+            return groups;
+        }
+        for (var authority : auth.getAuthorities()) {
+            String role = authority.getAuthority();
+            if (role.startsWith("ROLE_")) {
+                role = role.substring("ROLE_".length());
+            }
+            groups.add(role);
+        }
+        return groups;
     }
 
     public BindCardResultResponse startCardBinding(String username, BindCardRequest request) {

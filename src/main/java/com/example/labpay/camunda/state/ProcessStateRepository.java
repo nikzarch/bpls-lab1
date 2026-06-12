@@ -7,6 +7,6 @@ import java.util.Optional;
 
 public interface ProcessStateRepository extends JpaRepository<ProcessState, Long> {
     Optional<ProcessState> findByProcessInstanceId(String processInstanceId);
-
+    List<ProcessState> findByOwnerUsername(String ownerUsername);
     List<ProcessState> findByStatus(ProcessStateStatus status);
 }

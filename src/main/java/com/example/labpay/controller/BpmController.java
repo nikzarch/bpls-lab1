@@ -1,6 +1,7 @@
 package com.example.labpay.controller;
 
 import com.example.labpay.camunda.BpmProcessFacade;
+import com.example.labpay.camunda.ProcessStartAuthorizer;
 import com.example.labpay.dto.request.BindCardRequest;
 import com.example.labpay.dto.request.CreatePaymentRequest;
 import com.example.labpay.dto.request.ProcessPaymentRequest;
@@ -13,16 +14,21 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/bpm")
 public class BpmController {
 
     private final BpmProcessFacade bpmProcessFacade;
+    private final ProcessStartAuthorizer processStartAuthorizer;
 
-    public BpmController(BpmProcessFacade bpmProcessFacade) {
+    public BpmController(BpmProcessFacade bpmProcessFacade, ProcessStartAuthorizer processStartAuthorizer) {
         this.bpmProcessFacade = bpmProcessFacade;
+        this.processStartAuthorizer = processStartAuthorizer;
     }
 
     @PostMapping("/cards/bind")
@@ -108,5 +114,31 @@ public class BpmController {
             case "stuck-transfer" -> bpmProcessFacade.start("maintenance-stuck-transfer", Map.of("trigger", "manual"));
             default -> throw new IllegalArgumentException("Unknown maintenance job: " + jobName);
         };
+    }
+
+    @GetMapping("/available")
+    @PreAuthorize("isAuthenticated()")
+    public Map<String, Set<String>> availableProcesses(Authentication auth) {
+        Set<String> userGroups = new LinkedHashSet<>();
+        for (var a : auth.getAuthorities()) {
+            String r = a.getAuthority();
+            userGroups.add(r.startsWith("ROLE_") ? r.substring(5) : r);
+        }
+
+        List<String> allKeys = List.of(
+                "card-binding-process", "payment-create-process", "payment-process",
+                "transfer-process", "wallet-top-up-process",
+                "maintenance-bank-reconciliation", "maintenance-hold-expiration",
+                "maintenance-card-session-cleanup", "maintenance-stuck-transfer"
+        );
+
+        Set<String> available = new LinkedHashSet<>();
+        for (String key : allKeys) {
+            Set<String> allowed = processStartAuthorizer.allowedStarterGroups(key);
+            if (allowed.isEmpty() || userGroups.stream().anyMatch(allowed::contains)) {
+                available.add(key);
+            }
+        }
+        return Map.of("processes", available);
     }
 }
