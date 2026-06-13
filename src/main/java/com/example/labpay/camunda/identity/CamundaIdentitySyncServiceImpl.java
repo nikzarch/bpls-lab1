@@ -6,12 +6,14 @@ import lombok.RequiredArgsConstructor;
 import org.camunda.bpm.engine.AuthorizationService;
 import org.camunda.bpm.engine.IdentityService;
 import org.camunda.bpm.engine.authorization.Authorization;
+import org.camunda.bpm.engine.authorization.Permission;
 import org.camunda.bpm.engine.authorization.Permissions;
 import org.camunda.bpm.engine.authorization.ProcessDefinitionPermissions;
 import org.camunda.bpm.engine.authorization.Resources;
 import org.camunda.bpm.engine.authorization.TaskPermissions;
 import org.camunda.bpm.engine.identity.Group;
 import org.camunda.bpm.engine.identity.User;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,7 +25,7 @@ import java.util.Objects;
 public class CamundaIdentitySyncServiceImpl implements CamundaIdentitySyncService {
 
     private static final String GROUP_TYPE = "WORKFLOW_ROLE";
-    private static final String MAINTENANCE_PREFIX = "maintenance-";
+    private static final List<String> CAMUNDA_ADMIN_GROUPS = List.of("camunda-admin");
 
     private static final List<String> CUSTOMER_PROCESS_KEYS = List.of(
             "card-binding-process",
@@ -43,26 +45,41 @@ public class CamundaIdentitySyncServiceImpl implements CamundaIdentitySyncServic
     private final IdentityService identityService;
     private final AuthorizationService authorizationService;
 
+    @Value("${camunda.bpm.admin-user.id:admin}")
+    private String camundaAdminId;
+
     @Override
     @Transactional
     public void ensureRoleGroups() {
-        for (Role role : Role.values()) {
-            ensureGroup(role);
-        }
+        runAsSystem(() -> {
+            for (Role role : Role.values()) {
+                ensureGroup(role);
+            }
+        });
     }
 
     @Override
     @Transactional
     public void ensureRoleAuthorizations() {
-        grantAllForGroup(Role.ADMIN.name());
+        runAsSystem(() -> {
+            grantAllForGroup(Role.ADMIN.name());
+            grantApplicationAccess(Role.ADMIN.name(), "tasklist", "cockpit", "admin", "welcome");
 
-        for (String processKey : CUSTOMER_PROCESS_KEYS) {
-            grantProcessStartAndRead(Role.CUSTOMER.name(), processKey);
-        }
-        grantTaskAccess(Role.CUSTOMER.name());
+            for (String processKey : CUSTOMER_PROCESS_KEYS) {
+                grantProcessStartAndRead(Role.CUSTOMER.name(), processKey);
+            }
+            grantTaskAccess(Role.CUSTOMER.name());
+            grantApplicationAccess(Role.CUSTOMER.name(), "tasklist");
 
-        for (String processKey : MAINTENANCE_PROCESS_KEYS) {
-            revokeProcessForGroup(Role.CUSTOMER.name(), processKey);
+            for (String processKey : MAINTENANCE_PROCESS_KEYS) {
+                revokeProcessForGroup(Role.CUSTOMER.name(), processKey);
+            }
+        });
+    }
+
+    private void grantApplicationAccess(String groupId, String... applications) {
+        for (String application : applications) {
+            upsertGrant(groupId, Resources.APPLICATION, application, Permissions.ACCESS);
         }
     }
 
@@ -76,10 +93,27 @@ public class CamundaIdentitySyncServiceImpl implements CamundaIdentitySyncServic
     @Override
     @Transactional
     public void syncRegisteredUser(XmlAppUser user, String rawPassword, Role role) {
-        ensureRoleGroups();
-        ensureGroup(role);
-        upsertUser(user, rawPassword, role);
-        syncMemberships(user.getUsername(), role);
+        runAsSystem(() -> {
+            ensureRoleGroupsInternal();
+            ensureGroup(role);
+            upsertUser(user, rawPassword, role);
+            syncMemberships(user.getUsername(), role);
+        });
+    }
+
+    private void runAsSystem(Runnable action) {
+        identityService.setAuthentication(camundaAdminId, CAMUNDA_ADMIN_GROUPS);
+        try {
+            action.run();
+        } finally {
+            identityService.clearAuthentication();
+        }
+    }
+
+    private void ensureRoleGroupsInternal() {
+        for (Role role : Role.values()) {
+            ensureGroup(role);
+        }
     }
 
     private void grantAllForGroup(String groupId) {
@@ -142,14 +176,13 @@ public class CamundaIdentitySyncServiceImpl implements CamundaIdentitySyncServic
     private void upsertGrant(String groupId,
                              Resources resource,
                              String resourceId,
-                             org.camunda.bpm.engine.authorization.Permission... permissions) {
+                             Permission... permissions) {
         Authorization authorization = authorizationService.createAuthorizationQuery()
                 .groupIdIn(groupId)
                 .resourceType(resource)
                 .resourceId(resourceId)
                 .singleResult();
 
-        boolean isNew = false;
         if (authorization == null || authorization.getAuthorizationType() != Authorization.AUTH_TYPE_GRANT) {
             if (authorization != null) {
                 authorizationService.deleteAuthorization(authorization.getId());
@@ -158,18 +191,13 @@ public class CamundaIdentitySyncServiceImpl implements CamundaIdentitySyncServic
             authorization.setGroupId(groupId);
             authorization.setResource(resource);
             authorization.setResourceId(resourceId);
-            isNew = true;
         }
 
-        for (var permission : permissions) {
+        for (Permission permission : permissions) {
             authorization.addPermission(permission);
         }
 
-        if (isNew) {
-            authorizationService.saveAuthorization(authorization);
-        } else {
-            authorizationService.saveAuthorization(authorization);
-        }
+        authorizationService.saveAuthorization(authorization);
     }
 
     private Group ensureGroup(Role role) {
