@@ -43,36 +43,41 @@ public class BpmProcessFacade {
     private final HistoryService historyService;
     private final ProcessStartAuthorizer processStartAuthorizer;
     private final CardService cardService;
+    private final CamundaSystemContext systemContext;
 
     public BpmProcessFacade(RuntimeService runtimeService,
                             TaskService taskService,
                             HistoryService historyService,
                             ProcessStartAuthorizer processStartAuthorizer,
-                            CardService cardService) {
+                            CardService cardService,
+                            CamundaSystemContext systemContext) {
         this.runtimeService = runtimeService;
         this.taskService = taskService;
         this.historyService = historyService;
         this.processStartAuthorizer = processStartAuthorizer;
         this.cardService = cardService;
+        this.systemContext = systemContext;
     }
 
     public ProcessLaunchResult start(String processKey, Map<String, Object> variables) {
         processStartAuthorizer.assertCanStart(processKey, currentUserGroups());
 
-        ProcessInstance instance = runtimeService.startProcessInstanceByKey(processKey, variables);
-        Task task = taskService.createTaskQuery()
-                .processInstanceId(instance.getId())
-                .orderByTaskCreateTime()
-                .desc()
-                .singleResult();
+        return systemContext.call(() -> {
+            ProcessInstance instance = runtimeService.startProcessInstanceByKey(processKey, variables);
+            Task task = taskService.createTaskQuery()
+                    .processInstanceId(instance.getId())
+                    .orderByTaskCreateTime()
+                    .desc()
+                    .singleResult();
 
-        return new ProcessLaunchResult(
-                instance.getId(),
-                instance.getProcessDefinitionId(),
-                task != null ? task.getId() : null,
-                task != null ? task.getName() : null,
-                Optional.of(snapshotVariables(instance.getId()))
-        );
+            return new ProcessLaunchResult(
+                    instance.getId(),
+                    instance.getProcessDefinitionId(),
+                    task != null ? task.getId() : null,
+                    task != null ? task.getName() : null,
+                    Optional.of(snapshotVariables(instance.getId()))
+            );
+        });
     }
 
     public Set<String> currentUserGroups() {
@@ -104,40 +109,31 @@ public class BpmProcessFacade {
     }
 
     public CardResponse completeCardBinding3ds(String username, String sessionId, String code) {
-        ProcessInstance processInstance = runtimeService.createProcessInstanceQuery()
-                .processDefinitionKey(CARD_BINDING_PROCESS)
-                .variableValueEquals("cardBindingSessionId", sessionId)
-                .active()
-                .singleResult();
+        return systemContext.call(() -> {
+            ProcessInstance processInstance = runtimeService.createProcessInstanceQuery()
+                    .processDefinitionKey(CARD_BINDING_PROCESS)
+                    .variableValueEquals("cardBindingSessionId", sessionId)
+                    .active()
+                    .singleResult();
 
-        if (processInstance == null) {
-            throw new NotFoundException("Card binding session not found");
-        }
+            if (processInstance == null) {
+                throw new NotFoundException("Card binding session not found");
+            }
 
-        Task task = taskService.createTaskQuery()
-                .processInstanceId(processInstance.getId())
-                .taskDefinitionKey(CARD_BINDING_CONFIRM_TASK)
-                .singleResult();
+            Task task = taskService.createTaskQuery()
+                    .processInstanceId(processInstance.getId())
+                    .taskDefinitionKey(CARD_BINDING_CONFIRM_TASK)
+                    .singleResult();
 
-        if (task == null) {
-            throw new NotFoundException("3DS confirmation task not found");
-        }
+            if (task == null) {
+                throw new NotFoundException("3DS confirmation task not found");
+            }
 
-        String processInstanceId = processInstance.getId();
-        taskService.complete(task.getId(), Map.of("cardBindingConfirmationCode", code));
+            String processInstanceId = processInstance.getId();
+            taskService.complete(task.getId(), Map.of("cardBindingConfirmationCode", code));
 
-        return toCard(snapshotVariablesFromHistory(processInstanceId));
-    }
-
-    private Map<String, Object> snapshotVariablesFromHistory(String processInstanceId) {
-        Map<String, Object> out = new LinkedHashMap<>();
-        List<HistoricVariableInstance> historic = historyService.createHistoricVariableInstanceQuery()
-                .processInstanceId(processInstanceId)
-                .list();
-        for (HistoricVariableInstance variable : historic) {
-            out.put(variable.getVariableName(), variable.getValue());
-        }
-        return out;
+            return toCard(snapshotVariablesFromHistory(processInstanceId));
+        });
     }
 
     public PaymentOrderResponse startPaymentCreate(String username, CreatePaymentRequest request) {
@@ -183,18 +179,23 @@ public class BpmProcessFacade {
 
     private Map<String, Object> snapshotVariables(String processInstanceId) {
         Map<String, Object> out = new LinkedHashMap<>();
+        try {
+            out.putAll(runtimeService.getVariables(processInstanceId));
+            if (!out.isEmpty()) {
+                return out;
+            }
+        } catch (Exception ignored) {
+        }
+        return snapshotVariablesFromHistory(processInstanceId);
+    }
+
+    private Map<String, Object> snapshotVariablesFromHistory(String processInstanceId) {
+        Map<String, Object> out = new LinkedHashMap<>();
         List<HistoricVariableInstance> historic = historyService.createHistoricVariableInstanceQuery()
                 .processInstanceId(processInstanceId)
                 .list();
         for (HistoricVariableInstance variable : historic) {
             out.put(variable.getVariableName(), variable.getValue());
-        }
-        if (!out.isEmpty()) {
-            return out;
-        }
-        try {
-            out.putAll(runtimeService.getVariables(processInstanceId));
-        } catch (Exception ignored) {
         }
         return out;
     }

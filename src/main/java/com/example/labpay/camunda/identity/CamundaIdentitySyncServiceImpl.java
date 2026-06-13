@@ -1,5 +1,6 @@
 package com.example.labpay.camunda.identity;
 
+import com.example.labpay.camunda.CamundaSystemContext;
 import com.example.labpay.domain.user.Role;
 import com.example.labpay.xml.XmlAppUser;
 import lombok.RequiredArgsConstructor;
@@ -13,7 +14,6 @@ import org.camunda.bpm.engine.authorization.Resources;
 import org.camunda.bpm.engine.authorization.TaskPermissions;
 import org.camunda.bpm.engine.identity.Group;
 import org.camunda.bpm.engine.identity.User;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,7 +25,6 @@ import java.util.Objects;
 public class CamundaIdentitySyncServiceImpl implements CamundaIdentitySyncService {
 
     private static final String GROUP_TYPE = "WORKFLOW_ROLE";
-    private static final List<String> CAMUNDA_ADMIN_GROUPS = List.of("camunda-admin");
 
     private static final List<String> CUSTOMER_PROCESS_KEYS = List.of(
             "card-binding-process",
@@ -44,14 +43,12 @@ public class CamundaIdentitySyncServiceImpl implements CamundaIdentitySyncServic
 
     private final IdentityService identityService;
     private final AuthorizationService authorizationService;
-
-    @Value("${camunda.bpm.admin-user.id:admin}")
-    private String camundaAdminId;
+    private final CamundaSystemContext systemContext;
 
     @Override
     @Transactional
     public void ensureRoleGroups() {
-        runAsSystem(() -> {
+        systemContext.run(() -> {
             for (Role role : Role.values()) {
                 ensureGroup(role);
             }
@@ -61,7 +58,7 @@ public class CamundaIdentitySyncServiceImpl implements CamundaIdentitySyncServic
     @Override
     @Transactional
     public void ensureRoleAuthorizations() {
-        runAsSystem(() -> {
+        systemContext.run(() -> {
             grantAllForGroup(Role.ADMIN.name());
             grantApplicationAccess(Role.ADMIN.name(), "tasklist", "cockpit", "admin", "welcome");
 
@@ -77,12 +74,6 @@ public class CamundaIdentitySyncServiceImpl implements CamundaIdentitySyncServic
         });
     }
 
-    private void grantApplicationAccess(String groupId, String... applications) {
-        for (String application : applications) {
-            upsertGrant(groupId, Resources.APPLICATION, application, Permissions.ACCESS);
-        }
-    }
-
     @Override
     @Transactional
     public void syncRegisteredUser(XmlAppUser user, String rawPassword) {
@@ -93,27 +84,14 @@ public class CamundaIdentitySyncServiceImpl implements CamundaIdentitySyncServic
     @Override
     @Transactional
     public void syncRegisteredUser(XmlAppUser user, String rawPassword, Role role) {
-        runAsSystem(() -> {
-            ensureRoleGroupsInternal();
+        systemContext.run(() -> {
+            for (Role r : Role.values()) {
+                ensureGroup(r);
+            }
             ensureGroup(role);
             upsertUser(user, rawPassword, role);
             syncMemberships(user.getUsername(), role);
         });
-    }
-
-    private void runAsSystem(Runnable action) {
-        identityService.setAuthentication(camundaAdminId, CAMUNDA_ADMIN_GROUPS);
-        try {
-            action.run();
-        } finally {
-            identityService.clearAuthentication();
-        }
-    }
-
-    private void ensureRoleGroupsInternal() {
-        for (Role role : Role.values()) {
-            ensureGroup(role);
-        }
     }
 
     private void grantAllForGroup(String groupId) {
@@ -149,6 +127,12 @@ public class CamundaIdentitySyncServiceImpl implements CamundaIdentitySyncServic
         upsertGrant(groupId, Resources.TASK, Authorization.ANY,
                 TaskPermissions.READ,
                 TaskPermissions.UPDATE);
+    }
+
+    private void grantApplicationAccess(String groupId, String... applications) {
+        for (String application : applications) {
+            upsertGrant(groupId, Resources.APPLICATION, application, Permissions.ACCESS);
+        }
     }
 
     private void revokeProcessForGroup(String groupId, String processKey) {

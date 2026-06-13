@@ -13,7 +13,7 @@ public class CamundaConfig implements CamundaProcessEngineConfiguration {
         configuration.setDatabaseSchemaUpdate("true");
         configuration.setJobExecutorActivate(true);
         configuration.setAuthorizationEnabled(true);
-        configuration.setAuthorizationEnabledForCustomCode(true);
+        configuration.setAuthorizationEnabledForCustomCode(false);
         configuration.setDefaultNumberOfRetries(3);
         configuration.setInitializeTelemetry(false);
     }

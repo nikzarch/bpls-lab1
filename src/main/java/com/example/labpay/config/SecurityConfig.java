@@ -1,6 +1,5 @@
 package com.example.labpay.config;
 
-import com.example.labpay.filter.CamundaAuthenticationFilter;
 import com.example.labpay.filter.JwtFilter;
 import com.example.labpay.service.XmlUserDetailsService;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +25,6 @@ public class SecurityConfig {
 
     private final XmlUserDetailsService userDetailsService;
     private final JwtFilter jwtFilter;
-    private final CamundaAuthenticationFilter camundaAuthenticationFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -59,11 +57,6 @@ public class SecurityConfig {
                 .addFilterBefore(
                         jwtFilter,
                         UsernamePasswordAuthenticationFilter.class
-                )
-
-                .addFilterAfter(
-                        camundaAuthenticationFilter,
-                        JwtFilter.class
                 );
 
         return http.build();
