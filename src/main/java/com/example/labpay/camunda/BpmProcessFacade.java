@@ -123,8 +123,21 @@ public class BpmProcessFacade {
             throw new NotFoundException("3DS confirmation task not found");
         }
 
+        String processInstanceId = processInstance.getId();
         taskService.complete(task.getId(), Map.of("cardBindingConfirmationCode", code));
-        return toCard(snapshotVariables(processInstance.getId()));
+
+        return toCard(snapshotVariablesFromHistory(processInstanceId));
+    }
+
+    private Map<String, Object> snapshotVariablesFromHistory(String processInstanceId) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        List<HistoricVariableInstance> historic = historyService.createHistoricVariableInstanceQuery()
+                .processInstanceId(processInstanceId)
+                .list();
+        for (HistoricVariableInstance variable : historic) {
+            out.put(variable.getVariableName(), variable.getValue());
+        }
+        return out;
     }
 
     public PaymentOrderResponse startPaymentCreate(String username, CreatePaymentRequest request) {
