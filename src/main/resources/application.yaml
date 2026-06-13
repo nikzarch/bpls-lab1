@@ -135,7 +135,8 @@ camunda:
     history-level: full
 
     authorization:
-      enabled: false
+      enabled: true
+      authorization-check-revokes: auto
 
     job-execution:
       enabled: true

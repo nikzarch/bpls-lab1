@@ -1,5 +1,6 @@
 package com.example.labpay.config;
 
+import com.example.labpay.filter.CamundaAuthenticationFilter;
 import com.example.labpay.filter.JwtFilter;
 import com.example.labpay.service.XmlUserDetailsService;
 import lombok.RequiredArgsConstructor;
@@ -11,7 +12,6 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -26,6 +26,7 @@ public class SecurityConfig {
 
     private final XmlUserDetailsService userDetailsService;
     private final JwtFilter jwtFilter;
+    private final CamundaAuthenticationFilter camundaAuthenticationFilter;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -58,6 +59,11 @@ public class SecurityConfig {
                 .addFilterBefore(
                         jwtFilter,
                         UsernamePasswordAuthenticationFilter.class
+                )
+
+                .addFilterAfter(
+                        camundaAuthenticationFilter,
+                        JwtFilter.class
                 );
 
         return http.build();

@@ -2,13 +2,14 @@ package com.example.labpay.camunda;
 
 import com.example.labpay.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
+import org.camunda.bpm.engine.AuthorizationService;
 import org.camunda.bpm.engine.RepositoryService;
+import org.camunda.bpm.engine.authorization.Authorization;
+import org.camunda.bpm.engine.authorization.ProcessDefinitionPermissions;
+import org.camunda.bpm.engine.authorization.Resources;
 import org.camunda.bpm.engine.repository.ProcessDefinition;
 import org.springframework.stereotype.Component;
 
-import java.util.Arrays;
-import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 
 @Component
@@ -16,19 +17,9 @@ import java.util.Set;
 public class ProcessStartAuthorizer {
 
     private final RepositoryService repositoryService;
+    private final AuthorizationService authorizationService;
 
     public void assertCanStart(String processKey, Set<String> userGroups) {
-        Set<String> allowed = allowedStarterGroups(processKey);
-        if (allowed.isEmpty()) {
-            return;
-        }
-        boolean permitted = userGroups.stream().anyMatch(allowed::contains);
-        if (!permitted) {
-            throw new BusinessException("Not allowed to start process " + processKey);
-        }
-    }
-
-    public Set<String> allowedStarterGroups(String processKey) {
         ProcessDefinition definition = repositoryService.createProcessDefinitionQuery()
                 .processDefinitionKey(processKey)
                 .latestVersion()
@@ -38,16 +29,24 @@ public class ProcessStartAuthorizer {
             throw new BusinessException("Unknown process: " + processKey);
         }
 
-        List<org.camunda.bpm.engine.identity.Group> identityLinks =
-                java.util.Collections.emptyList();
+        if (!canStart(userGroups, processKey)) {
+            throw new BusinessException("Not allowed to start process " + processKey);
+        }
+    }
 
-        Set<String> groups = new LinkedHashSet<>();
-        for (org.camunda.bpm.engine.task.IdentityLink link :
-                repositoryService.getIdentityLinksForProcessDefinition(definition.getId())) {
-            if (link.getGroupId() != null) {
-                groups.add(link.getGroupId());
+    public boolean canStart(Set<String> userGroups, String processKey) {
+        for (String group : userGroups) {
+            boolean allowed = authorizationService.isUserAuthorized(
+                    null,
+                    java.util.List.of(group),
+                    ProcessDefinitionPermissions.CREATE_INSTANCE,
+                    Resources.PROCESS_DEFINITION,
+                    processKey
+            );
+            if (allowed) {
+                return true;
             }
         }
-        return groups;
+        return false;
     }
 }

@@ -134,8 +134,7 @@ public class BpmController {
 
         Set<String> available = new LinkedHashSet<>();
         for (String key : allKeys) {
-            Set<String> allowed = processStartAuthorizer.allowedStarterGroups(key);
-            if (allowed.isEmpty() || userGroups.stream().anyMatch(allowed::contains)) {
+            if (processStartAuthorizer.canStart(userGroups, key)) {
                 available.add(key);
             }
         }
