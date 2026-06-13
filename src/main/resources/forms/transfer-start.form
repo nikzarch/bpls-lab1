@@ -3,12 +3,6 @@
   "id": "transfer-start",
   "components": [
     {
-      "label": "Username",
-      "type": "textfield",
-      "key": "username",
-      "validate": { "required": true }
-    },
-    {
       "label": "ID получателя",
       "type": "number",
       "key": "recipientId",

@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" id="Definitions_Labpay" targetNamespace="http://labpay.example.com/bpmn">
   <bpmn:process id="payment-process" name="Проведение платежа" isExecutable="true" camunda:historyTimeToLive="30" camunda:candidateStarterGroups="CUSTOMER,ADMIN">
-    <bpmn:startEvent id="payment-process-start" name="Старт оплаты" camunda:formRef="payment-process-start" camunda:formRefBinding="deployment">
+    <bpmn:startEvent id="payment-process-start" name="Старт оплаты" camunda:formRef="payment-process-start" camunda:formRefBinding="deployment" camunda:initiator="username">
       <bpmn:extensionElements>
         <camunda:executionListener event="start" delegateExpression="${camundaProcessStateListener}" />
       </bpmn:extensionElements>
@@ -33,6 +33,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:userTask id="pp_enter_card_details_task" name="Ввести реквизиты карты" camunda:formRef="card-binding-start" camunda:formRefBinding="deployment" camunda:candidateGroups="CUSTOMER,ADMIN">
       <bpmn:extensionElements>
+        <camunda:taskListener event="create" delegateExpression="${assignTaskToUsernameListener}" />
         <camunda:taskListener event="create" delegateExpression="${camundaProcessStateListener}" />
         <camunda:taskListener event="complete" delegateExpression="${camundaProcessStateListener}" />
       </bpmn:extensionElements>
@@ -54,6 +55,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:userTask id="pp_card_binding_confirm_task" name="Подтвердить 3DS" camunda:formRef="card-binding-confirm" camunda:formRefBinding="deployment" camunda:candidateGroups="CUSTOMER,ADMIN">
       <bpmn:extensionElements>
+        <camunda:taskListener event="create" delegateExpression="${assignTaskToUsernameListener}" />
         <camunda:taskListener event="create" delegateExpression="${camundaProcessStateListener}" />
         <camunda:taskListener event="complete" delegateExpression="${camundaProcessStateListener}" />
       </bpmn:extensionElements>

@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_Labpay" targetNamespace="http://labpay.example.com/bpmn">
   <bpmn:process id="payment-create-process" name="Создание заказа оплаты" isExecutable="true" camunda:historyTimeToLive="30" camunda:candidateStarterGroups="CUSTOMER,ADMIN">
-    <bpmn:startEvent id="payment-create-process-start" name="Параметры заказа" camunda:formRef="payment-create-start" camunda:formRefBinding="deployment">
+    <bpmn:startEvent id="payment-create-process-start" name="Параметры заказа" camunda:formRef="payment-create-start" camunda:formRefBinding="deployment" camunda:initiator="username">
       <bpmn:extensionElements>
         <camunda:executionListener event="start" delegateExpression="${camundaProcessStateListener}" />
       </bpmn:extensionElements>

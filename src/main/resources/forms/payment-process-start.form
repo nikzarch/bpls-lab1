@@ -3,12 +3,6 @@
   "id": "payment-process-start",
   "components": [
     {
-      "label": "Username",
-      "type": "textfield",
-      "key": "username",
-      "validate": { "required": true }
-    },
-    {
       "label": "ID существующего заказа (если заказ уже создан)",
       "type": "number",
       "key": "orderId"

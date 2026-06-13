@@ -3,12 +3,6 @@
   "id": "payment-create-start",
   "components": [
     {
-      "label": "Username",
-      "type": "textfield",
-      "key": "username",
-      "validate": { "required": true }
-    },
-    {
       "label": "ID виджета",
       "type": "number",
       "key": "widgetId",
