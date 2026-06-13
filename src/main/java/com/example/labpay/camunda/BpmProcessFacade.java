@@ -104,8 +104,6 @@ public class BpmProcessFacade {
     }
 
     public CardResponse completeCardBinding3ds(String username, String sessionId, String code) {
-        cardService.callBankConfirm3ds(sessionId, code);
-
         ProcessInstance processInstance = runtimeService.createProcessInstanceQuery()
                 .processDefinitionKey(CARD_BINDING_PROCESS)
                 .variableValueEquals("cardBindingSessionId", sessionId)
